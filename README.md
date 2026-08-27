@@ -10,8 +10,8 @@ is dug out from under it falls. **One hit knocks a player out**; the last tank
 standing wins the round, and scores carry across rounds.
 
 Everything is drawn as vector graphics on a canvas and every sound is
-synthesised — no images, no audio files, no dependencies, no build step. The
-whole game is one file: [`public/index.html`](public/index.html).
+synthesised — no images, no fonts, no audio files, no dependencies, no build
+step. The whole game is one file: [`public/index.html`](public/index.html).
 
 ## Controls
 
@@ -21,9 +21,9 @@ whole game is one file: [`public/index.html`](public/index.html).
 - **Keyboard** — `←`/`→` angle, `↑`/`↓` power (hold `shift` for bigger steps),
   `space` to fire.
 
-On phones the game is **landscape only** — rotate the device, and use the
-**Full** button for fullscreen with the orientation pinned where the browser
-allows it.
+The battlefield is **square**, so the game plays the same held upright or
+sideways, on a phone or a desktop — it never asks you to rotate anything. The
+**Full** button gives you fullscreen if you want it.
 
 ## Run locally
 

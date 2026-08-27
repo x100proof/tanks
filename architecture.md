@@ -27,9 +27,15 @@ SVG data URI. There are no images, fonts or audio files to fetch.
 ## 2. Coordinate system and the camera
 
 All game logic — physics, terrain, tank sizes, blast radii — is expressed in a
-fixed **world coordinate system of 1200 × 700 units** (`W` × `H`). No device
-pixels appear anywhere in the simulation, so behaviour is identical on every
-screen.
+fixed **square world of 700 × 700 units** (`SIZE`). No device pixels appear
+anywhere in the simulation, so behaviour is identical on every screen.
+
+The battlefield is square on purpose. A square is the one shape that suits
+every viewport equally: it is scaled to fit whatever it lands in, and the
+leftover screen along the long axis is filled with more of the same
+battlefield (see *Overscan*). A phone held upright, a phone on its side and a
+desktop therefore all get exactly the same fight, only framed differently —
+there is no orientation the game prefers, and no rotation prompt.
 
 Rendering is **fully vector**: paths, arcs and gradients on a 2D canvas. Nothing
 is rasterised or resampled.
@@ -38,7 +44,10 @@ The `view` object maps world units to the screen each time the canvas is sized:
 
 - `s` — a single **uniform** scale, `min(cssW/W, cssH/H)` ("contain"), so the
   whole world is always visible and nothing is ever cropped or distorted.
-- `offX`, `offY` — centring offsets.
+- `offX`, `offY` — framing offsets. Horizontally the world is centred;
+  vertically it sits low in the frame (80% of the slack above it), so spare
+  height on a tall screen becomes sky that shells fly through rather than a
+  dead band of dirt beneath the battlefield.
 - `x0, x1, y0, y1` — the visible rectangle **in world coordinates**. Because the
   fit is "contain", the screen is usually wider than the world; these bounds run
   past `0..W`.
@@ -58,8 +67,12 @@ draws **past the world edges** rather than leaving letterbox bars:
   a clamp, so the edge columns extend outwards and the ground continues to the
   screen edge.
 
-Tanks are always placed inside `0..W`, so the overscan region is scenery only
-and gameplay is unaffected by screen shape.
+Tanks are always placed inside the world, so the overscan region is scenery
+only and gameplay is unaffected by screen shape. The extended ground is
+nonetheless **solid**: shell/ground collision uses the same clamped heightfield
+across the whole visible area, so a shell can never fly through scenery the
+player can see. Beyond the edges of the screen there is nothing to look wrong,
+and a shell out there may still be blown back into play.
 
 ---
 
@@ -100,7 +113,7 @@ grass where `burn` is clear, scorched dirt where it is set.
 | `GRAV` | 320 | downward acceleration, world units/s² |
 | `WIND_ACC` | 5.2 | horizontal acceleration per unit of wind |
 | `MAX_WIND` | 10 | wind is a random integer in `-10..10`, re-rolled every turn |
-| `MUZZLE_V` | 6.4 | muzzle speed per unit of power (power 100 → 640 u/s) |
+| `MUZZLE_V` | √(`GRAV`·`W`·1.15)/100 ≈ 5.08 | muzzle speed per unit of power, derived so full power carries about 1.15 battlefields — the far side is always reachable, never trivially so |
 | `BLAST_R` | 48 | crater radius and kill radius |
 | `TANK_R` | 20 | tank hit radius |
 | `STEP` | 1/300 s | fixed integration step |
@@ -110,10 +123,13 @@ of frame rate, capped at 400 substeps per frame. Each step applies wind to `vx`
 and gravity to `vy`, then advances position and tests, in order:
 
 1. **Direct hit** — within `TANK_R` of any live tank's centre `(x, y-14)`.
-2. **Ground** — `y >= terrain[x]` while inside the world.
+2. **Ground** — `y >= terrain[x]`, across the world and the visible overscan.
 3. **Lost** — `y > H + 300`, or `|x|` more than 1400 beyond the world, at which
    point the shot is a miss. The generous horizontal margin lets a strong wind
    blow a shell back into play.
+
+The ground test covers the visible overscan as well as the world proper, so
+what looks solid is solid (§2).
 
 On impact the blast is resolved **before** the ground changes shape: every live
 tank within `BLAST_R + TANK_R * 0.6` of the impact point is eliminated. Then the
@@ -184,19 +200,23 @@ deliberately does **not** plot the trajectory: finding the arc is the game.
 The page is a full-height flex column: scoreboard, playfield, controls. The
 canvas fills the stage exactly and the game draws edge to edge (§2).
 
-**Landscape only on touch devices.** Under
-`(orientation: portrait) and (pointer: coarse)` the game and setup screen are
-hidden and a "turn your device sideways" prompt is shown. A **Full** button
-requests fullscreen and then `screen.orientation.lock('landscape')`, which is
-the only way to actually pin orientation on Android Chrome; iOS does not support
-it, so the rotate prompt is the fallback there.
+**Both orientations, no rotation prompt.** Because the battlefield is square
+(§2), neither orientation is privileged and the game never asks the player to
+turn the device. A **Full** button is still offered: it requests fullscreen and,
+where the browser allows it, `screen.orientation.lock('landscape')` — a
+convenience, not a requirement.
 
-**Floating controls on short viewports.** Under `max-height: 560px` — a phone in
-landscape — the control bar becomes a translucent overlay across the bottom of
-the field instead of taking space in the column. This roughly halves the chrome
-and gives the battlefield the height it needs. To stop the bar covering the
-action, `view.inset` measures its height in world units and §3 keeps the terrain
-surface — and therefore every tank — above it.
+**Portrait** (`max-width: 560px`) has height to spare and none to waste
+sideways, so the FIRE button drops onto its own full-width row and the
+scoreboard keeps only the colour chips and scores — the name of whoever is up
+is on the turn line directly below. The setup screen stacks its name fields.
+
+**Short viewports** (`max-height: 560px` — a phone on its side) have the
+opposite problem, so the control bar becomes a translucent overlay across the
+bottom of the field instead of taking space in the column. To stop it covering
+the action, `view.inset` measures its height in world units and §3 keeps the
+terrain surface — and therefore every tank — above it. The class is set from JS
+rather than a media query so a single rule decides it.
 
 Scores, the wind gauge, and the turn indicator are sized with `clamp()` so they
 stay readable from phone to desktop. The active player is marked on the
@@ -256,7 +276,7 @@ browser
 
 ## 10. Debug handle
 
-`window.__debug` exposes `{ G, view, fire, newRound, startGame }`. It is what the
+`window.__debug` exposes `{ G, view, fire, newRound, startGame, worldW, worldH }`. It is what the
 browser-driven tests use to inspect terrain, force deterministic shots and step
 rounds. It is intentionally shipped: this is a local hot-seat game with nothing
 to protect, and the handle makes the game testable.

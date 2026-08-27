@@ -23,7 +23,10 @@
   }
 
   .wrap{
-    width:100%; max-width:1200px; height:100vh; height:100dvh;
+    /* The battlefield is square, so cap the width against the viewport height:
+       it keeps the stage near-square and stops a wide window filling itself
+       with scenery either side of the fight. */
+    width:100%; max-width:min(1200px, 125vh); height:100vh; height:100dvh;
     display:flex; flex-direction:column; gap:8px;
     padding:8px calc(8px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
   }
@@ -131,55 +134,55 @@
   }
   .pcard input:focus{outline:none; border-bottom-color:var(--c)}
 
-  /* ---------- short viewports (phone in landscape) ---------- */
-  /* The controls float over the battlefield so the field keeps the full
+  /* ---------- short viewports (phone held sideways) ---------- */
+  /* Driven by the `short` class rather than a height media query, because when
+     the page is rendered rotated (below) the useful height is the viewport's
+     *width* — a media query would measure the wrong axis. JS sets the class.
+     The controls float over the battlefield so the field keeps the full
      height; the game reserves matching dead space at the bottom of the
      world (see view.inset) so no terrain or tank hides behind them. */
-  @media (max-height:560px){
-    .wrap{position:relative; gap:6px; padding:5px calc(5px + env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) calc(5px + env(safe-area-inset-left))}
-    .controls{
-      position:absolute; z-index:5;
-      left:calc(5px + env(safe-area-inset-left)); right:calc(5px + env(safe-area-inset-right)); bottom:calc(5px + env(safe-area-inset-bottom));
-      background:rgba(20,30,42,.82); backdrop-filter:blur(8px);
-    }
-    .hud{padding:4px 10px; border-radius:11px}
-    .score .num{font-size:24px}
-    .controls{padding:5px 9px 7px; gap:5px; border-radius:11px}
-    .dials{gap:9px}
-    .dial label{margin-bottom:0}
-    input[type=range]{height:30px}
-    input[type=range]::-webkit-slider-thumb{width:30px; height:30px; margin-top:-8px}
-    .fire{height:44px; min-width:120px; padding:0 16px}
-    .banner{gap:9px}
-    .setup{gap:9px}
-    .setup h1{font-size:30px}
-    .pcard{padding:5px 8px}
+  html.short .wrap{position:relative; gap:6px; padding:5px calc(5px + env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) calc(5px + env(safe-area-inset-left))}
+  html.short .controls{
+    position:absolute; z-index:5;
+    left:calc(5px + env(safe-area-inset-left)); right:calc(5px + env(safe-area-inset-right)); bottom:calc(5px + env(safe-area-inset-bottom));
+    background:rgba(20,30,42,.82); backdrop-filter:blur(8px);
+    padding:5px 9px 7px; gap:5px; border-radius:11px;
   }
+  html.short .hud{padding:4px 10px; border-radius:11px}
+  html.short .score .num{font-size:24px}
+  html.short .dials{gap:9px}
+  html.short .dial label{margin-bottom:0}
+  html.short input[type=range]{height:30px}
+  html.short input[type=range]::-webkit-slider-thumb{width:30px; height:30px; margin-top:-8px}
+  html.short .fire{height:44px; min-width:120px; padding:0 16px}
+  html.short .banner{gap:9px}
+  html.short .setup{gap:9px}
+  html.short .setup h1{font-size:30px}
+  html.short .pcard{padding:5px 8px}
+
   @media (pointer:coarse){ .keys{display:none} }
   @media (pointer:fine){ #full{display:none} }
 
-  /* ---------- portrait lock ---------- */
-  .rotate{display:none}
-  @media (orientation:portrait) and (pointer:coarse){
-    .wrap,.setup{display:none !important}
-    .rotate{
-      display:flex; position:fixed; inset:0; z-index:60; background:#0d141c;
-      flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:28px;
-    }
+  /* ---------- narrow viewports (phone held upright) ----------
+     Portrait has height to spare and none to waste sideways, so the FIRE
+     button drops onto its own full-width row and the scoreboard keeps just
+     the colour chips and numbers — the name of whoever is up is already on
+     the turn line directly below. */
+  @media (max-width:560px){
+    .score .name{display:none}
+    .score{gap:5px; padding:3px 5px}
+    .scores{gap:4px}
+    .dials{grid-template-columns:1fr 1fr}
+    .fire{grid-column:1 / -1; width:100%; min-width:0; margin-top:2px}
+    .turnbar{flex-wrap:wrap; row-gap:4px}
+    .turnbar .hint{font-size:10px}
+    .players{flex-direction:column; width:100%; max-width:280px}
+    .pcard{width:100%}
+    .pcard input{flex:1; width:auto}
   }
-  .rotate .phone{font-size:64px; animation:tip 2.2s ease-in-out infinite; transform-origin:50% 50%}
-  .rotate h2{margin:0; font-size:24px}
-  .rotate p{margin:0; color:var(--muted); font-size:15px; font-weight:600; max-width:22em; line-height:1.5}
-  @keyframes tip{0%,45%{transform:rotate(0)} 60%,90%{transform:rotate(-90deg)} 100%{transform:rotate(0)}}
 </style>
 </head>
 <body>
-
-<div class="rotate" aria-hidden="true">
-  <div class="phone">📱</div>
-  <h2>Turn your device sideways</h2>
-  <p>Tank Duel is played in landscape. Rotate your phone to start the battle.</p>
-</div>
 
 <!-- ---------------------------------------------------------- setup screen -->
 <div class="setup" id="setup">
@@ -249,11 +252,20 @@
 'use strict';
 
 // ------------------------------------------------------------------ constants
-const W = 1200, H = 700;            // logical drawing size; canvas letterboxes into the stage
-const GRAV = 320;                   // px/s²
-const WIND_ACC = 5.2;               // px/s² per unit of wind
+// The world is a SQUARE of world units. A square is the one shape that suits
+// every screen equally: it is scaled to fit whatever viewport it lands in, and
+// the leftover screen on the long axis is filled with more of the same
+// battlefield (§ overscan), so a phone held upright, a phone on its side and a
+// desktop all get the same fight, just framed differently.
+const SIZE = 700;
+const W = SIZE, H = SIZE;
+
+const GRAV = 320;                   // world units/s²
+const WIND_ACC = 5.2;               // world units/s² per unit of wind
 const MAX_WIND = 10;
-const MUZZLE_V = 6.4;               // power 100 -> 640 px/s
+// Full power carries about 1.15 battlefields, so the far side is always
+// reachable but never trivially so.
+const MUZZLE_V = Math.sqrt(GRAV * W * 1.15) / 100;
 const BLAST_R = 48;                 // crater + kill radius
 const TANK_R = 20;                  // tank hit radius
 const BEDROCK = H - 2;              // ground can never be dug below this
@@ -517,8 +529,14 @@ function stepShell(h) {
   for (const tk of G.tanks) {
     if (!tk.dead && Math.hypot(s.x - tk.x, s.y - (tk.y - 14)) < TANK_R) { impact(s.x, s.y); return true; }
   }
-  // Ground.
-  if (s.x >= 0 && s.x < W && s.y >= G.terrain[ix(s.x)]) { impact(s.x, G.terrain[ix(s.x)]); return true; }
+  // Ground — including the extended ground drawn past the world edges (§2), so
+  // a shell can never fly through scenery the player can see. Beyond the screen
+  // there is nothing to look wrong, and a shell out there may still blow back.
+  const solidFrom = Math.min(0, view.x0) - 4, solidTo = Math.max(W, view.x1) + 4;
+  if (s.x >= solidFrom && s.x <= solidTo && s.y >= G.terrain[ix(s.x)]) {
+    impact(s.x, G.terrain[ix(s.x)]);
+    return true;
+  }
   // Gone for good — off the bottom, or so far out it can't blow back.
   if (s.y > H + 300 || s.x < -1400 || s.x > W + 1400) {
     G.shell = null; whistleStop(); endTurn(); return true;
@@ -766,9 +784,21 @@ function drawTank(tk) {
   ctx.fillStyle = tk.dead ? '#9aa6b3' : '#fff';
   ctx.fillText(tk.name, tk.x, tk.y - 46 - fs * .4);
 
+  // Knocked out: a drawn cross, not an emoji — no font to depend on.
   if (tk.dead) {
-    ctx.font = `bold ${Math.round(fs * 1.7)}px system-ui, sans-serif`;
-    ctx.fillText('💀', tk.x, tk.y - 46 - fs * 1.9);
+    const cy = tk.y - 46 - fs * 1.9, r = fs * .55;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = fs * .42;
+    for (const pass of [0, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(tk.x - r, cy - r); ctx.lineTo(tk.x + r, cy + r);
+      ctx.moveTo(tk.x + r, cy - r); ctx.lineTo(tk.x - r, cy + r);
+      ctx.stroke();
+      ctx.strokeStyle = '#e8edf3'; ctx.lineWidth = fs * .24;   // second pass draws the mark
+      if (pass) break;
+    }
+    ctx.restore();
   }
 }
 
@@ -1044,10 +1074,19 @@ el('start').addEventListener('click', () => {
 });
 
 // ------------------------------------------------------------------ boot
+// `short` drives the compact layout where the controls float over the field —
+// a phone on its side. Portrait has height to spare, so it keeps the controls
+// in the normal flow below the battlefield.
+const coarse = matchMedia('(pointer:coarse)');
+function applyLayout() {
+  document.documentElement.classList.toggle('short', innerHeight <= 560);
+}
+
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const r = cv.getBoundingClientRect();
-  const cssW = Math.max(1, r.width), cssH = Math.max(1, r.height);
+  // Layout size, not getBoundingClientRect: the latter reports the rotated
+  // box, with width and height swapped.
+  const cssW = Math.max(1, cv.clientWidth), cssH = Math.max(1, cv.clientHeight);
 
   cv.width = Math.round(cssW * dpr);
   cv.height = Math.round(cssH * dpr);
@@ -1055,25 +1094,31 @@ function fitCanvas() {
   const s = Math.min(cssW / W, cssH / H);          // contain: the whole world stays visible
   view.s = s;
   view.offX = (cssW - W * s) / 2;
-  view.offY = (cssH - H * s) / 2;
+  // Sit the world low in the frame rather than centring it. On a tall screen
+  // the spare height then becomes sky — which shells actually fly through —
+  // instead of a dead band of dirt under the battlefield.
+  view.offY = (cssH - H * s) * 0.8;
   view.x0 = -view.offX / s;  view.x1 = (cssW - view.offX) / s;
   view.y0 = -view.offY / s;  view.y1 = (cssH - view.offY) / s;
 
   // How much world the floating control bar covers, when it is floating.
   const bar = document.querySelector('.controls');
-  view.inset = matchMedia('(max-height:560px)').matches
-    ? (bar.getBoundingClientRect().height + 10) / s
+  view.inset = document.documentElement.classList.contains('short')
+    ? (bar.offsetHeight + 10) / s
     : 0;
 
   ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * view.offX, dpr * view.offY);
 }
-addEventListener('resize', fitCanvas);
-addEventListener('orientationchange', fitCanvas);
+const relayout = () => { applyLayout(); fitCanvas(); };
+addEventListener('resize', relayout);
+addEventListener('orientationchange', relayout);
+coarse.addEventListener?.('change', relayout);
 new ResizeObserver(fitCanvas).observe(cv);        // catches layout changes too
 
 // Handle for the browser console and the Playwright smoke test.
-window.__debug = { G, view, fire, newRound, startGame };
+window.__debug = { G, view, fire, newRound, startGame, worldW: () => W, worldH: () => H };
 
+applyLayout();
 fitCanvas();
 renderPlayers();
 generateTerrain();                            // backdrop behind the setup screen
