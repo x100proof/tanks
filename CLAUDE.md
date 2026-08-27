@@ -37,8 +37,10 @@ confirm every statement in it still holds.
   assets. Keep it that way unless the design in `architecture.md` says
   otherwise.
 - `server.js` is a zero-dependency static file server and should stay boring.
-- Deployment artefacts live in `deploy/` and are copied into place; see
-  `architecture.md` for the topology and `README.md` for the commands.
+- `DEPLOY.md` explains how anyone can host their own copy, and must stay
+  generic — no hostnames, addresses or infrastructure specific to one machine.
+  The author's own deployment is described in `architecture.md`, and the files
+  it uses are in `deploy/`.
 
 ## Testing
 

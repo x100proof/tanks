@@ -21,6 +21,8 @@ step. The whole game is one file: [`public/index.html`](public/index.html).
 
 - **Sliders** — angle (0–180°) and power (10–100). Power fills in from the left
   so you can see how strong the shot is at a glance.
+- **The − and + buttons** either side of each slider nudge it one step at a
+  time, for fine aiming. Hold one down to keep going.
 - **Drag the battlefield** — direction sets the angle, distance sets the power.
   Dragging never fires; press **FIRE!** to shoot.
 - **Keyboard** — `←`/`→` angle, `↑`/`↓` power (hold `shift` for bigger steps),
@@ -41,44 +43,26 @@ sideways, on a phone or a desktop — it never asks you to rotate anything. The
 **Full** button in the top-right corner goes full screen, and turns into
 **Exit** to come back (Escape works too).
 
-## Run locally
+## Playing it
+
+Open [`public/index.html`](public/index.html) in a browser — that is the whole
+game, and it runs straight off the filesystem.
+
+To serve it instead:
 
 ```bash
 node server.js       # http://127.0.0.1:3005
 ```
+
+## Hosting it yourself
+
+One self-contained HTML file, no build step, no dependencies and no server-side
+state, so it will run on anything that can serve a web page — a static host, a
+spare Raspberry Pi, or the bundled zero-dependency server.
+[`DEPLOY.md`](DEPLOY.md) walks through the options.
 
 ## Design
 
 The design lives in [`architecture.md`](architecture.md) and is kept in step
 with the implementation — see [`CLAUDE.md`](CLAUDE.md).
 
-## Deployment (backend host)
-
-Follows the battleship/kidage pattern — see `deploy/`:
-
-- **systemd user service**: `deploy/tanks.service` →
-  `~/.config/systemd/user/tanks.service`
-
-  ```bash
-  cp deploy/tanks.service ~/.config/systemd/user/tanks.service
-  systemctl --user daemon-reload
-  systemctl --user enable --now tanks.service
-  ```
-
-  Lingering is enabled for this user (`loginctl enable-linger`), so the service
-  starts at boot without a login session, and `Restart=always` brings it back if
-  the process dies.
-
-- **nginx vhost**: `deploy/tanks.nginx` →
-  `/etc/nginx/sites-available/tanks.example.com`, symlinked into `sites-enabled`.
-
-  ```bash
-  sudo cp deploy/tanks.nginx /etc/nginx/sites-available/tanks.example.com
-  sudo ln -sfn /etc/nginx/sites-available/tanks.example.com /etc/nginx/sites-enabled/tanks.example.com
-  sudo nginx -t && sudo systemctl reload nginx
-  ```
-
-  It listens on localhost and the tailnet IP and proxies to `127.0.0.1:3005`.
-  The public front end (the edge host, see `~/code/sysadmin`)
-  terminates TLS for `*.example.com` and proxies here over the private network; its wildcard
-  vhost already covers this subdomain, so no change was needed there.

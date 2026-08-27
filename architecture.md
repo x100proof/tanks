@@ -15,7 +15,8 @@ Tank Duel is a hot-seat artillery game for 2–4 players on one device, hosted a
 |---|---|
 | `public/index.html` | The entire game — markup, CSS and JS in one file. No build step, no dependencies, no external assets. |
 | `server.js` | Zero-dependency Node static file server for `public/`. |
-| `deploy/tanks.service` | systemd **user** unit. |
+| `DEPLOY.md` | How anyone can host their own copy. Deliberately generic. |
+| `deploy/tanks.service` | systemd **user** unit, for the author's own host. |
 | `deploy/tanks.nginx` | nginx vhost for the backend host. |
 
 Everything the browser needs is inside `public/index.html`: the graphics are
@@ -223,7 +224,14 @@ battlefield uses — there is no second, drifting copy of what a tank looks like
 Three input methods drive the same two values (`angle`, `power`), and all three
 stay in sync through `syncUI`:
 
-- **Sliders** — angle `0..180`, power `10..100`. The two are deliberately
+- **Sliders** — angle `0..180`, power `10..100`, each flanked by a **−/+
+  button** that steps it by one for fine aiming. The buttons repeat when held
+  (350 ms before the first repeat, then every 55 ms), disable themselves at the
+  ends of their range, and route through the same `syncUI` as everything else so
+  the slider, the readout, the power fill and the barrel all stay in step. A tap
+  acts on `pointerdown`; the `click` handler fires only for keyboard activation
+  (`event.detail === 0`), so a tap can never count twice. The two are
+  deliberately
   distinguishable at a glance: angle wears a pale tint of the player's colour,
   power wears the full colour **and fills in from the left up to the ball**, so
   how full a shot is can be read without reading the number. The fill stops
@@ -332,6 +340,10 @@ A **Sound** toggle mutes everything and stops any whistle in flight.
 ---
 
 ## 11. Server and deployment
+
+> This section records how **this** instance is deployed. For hosting a copy
+> yourself, see [`DEPLOY.md`](DEPLOY.md), which is kept free of any of these
+> specifics.
 
 `server.js` serves `public/` over HTTP on `127.0.0.1:3005` (override with
 `PORT`/`HOST`). It resolves and normalises the request path and refuses anything

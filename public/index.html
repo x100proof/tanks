@@ -124,6 +124,17 @@
   button.tiny{font-size:13px; padding:7px 11px; border-radius:9px; letter-spacing:0}
   .fire{min-width:170px; height:56px; padding:0 26px; color:#fff}
 
+  /* One-at-a-time nudges either side of each slider, for fine aiming. */
+  .dial .track{display:flex; align-items:center; gap:7px}
+  .dial .track input[type=range]{flex:1 1 auto; min-width:0}
+  .step{
+    flex:none; width:36px; height:36px; padding:0; border-radius:10px;
+    background:var(--panel-2); color:var(--ink); box-shadow:0 3px 0 #0b1119;
+    font-size:21px; line-height:1;
+  }
+  .step:active{box-shadow:0 0 0 #0b1119 !important}
+  .step:disabled{opacity:.35}
+
   /* ---------- setup screen ---------- */
   .setup{
     position:fixed; inset:0; z-index:40; display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -176,6 +187,8 @@
   html.short .score .num{font-size:24px}
   html.short .dials{gap:9px}
   html.short .dial label{margin-bottom:0}
+  html.short .step{width:30px; height:30px; font-size:18px; border-radius:8px}
+  html.short .dial .track{gap:5px}
   html.short input[type=range]{height:30px; --tw:30px}
   html.short input[type=range]::-webkit-slider-thumb{width:30px; height:30px; margin-top:-8px}
   html.short .fire{height:44px; min-width:120px; padding:0 16px}
@@ -192,6 +205,8 @@
      the colour chips and numbers — the name of whoever is up is already on
      the turn line directly below. */
   @media (max-width:560px){
+    .step{width:32px; height:32px; font-size:19px}
+    .dial .track{gap:5px}
     /* Let a row spill onto a second line rather than squeezing, and give the
        "direct hits only" note a line of its own. */
     .field{flex-wrap:wrap; justify-content:center; row-gap:4px}
@@ -300,11 +315,19 @@
     <div class="dials">
       <div class="dial">
         <label for="angle">ANGLE <span class="read"><span id="angleRead">45</span>°</span></label>
-        <input type="range" id="angle" min="0" max="180" step="1" value="45" aria-label="Angle in degrees">
+        <div class="track">
+          <button class="step" id="angleDown" aria-label="Angle down one degree">&minus;</button>
+          <input type="range" id="angle" min="0" max="180" step="1" value="45" aria-label="Angle in degrees">
+          <button class="step" id="angleUp" aria-label="Angle up one degree">+</button>
+        </div>
       </div>
       <div class="dial">
         <label for="power">POWER <span class="read" id="powerRead">60</span></label>
-        <input type="range" id="power" min="10" max="100" step="1" value="60" aria-label="Power">
+        <div class="track">
+          <button class="step" id="powerDown" aria-label="Power down one">&minus;</button>
+          <input type="range" id="power" min="10" max="100" step="1" value="60" aria-label="Power">
+          <button class="step" id="powerUp" aria-label="Power up one">+</button>
+        </div>
       </div>
       <button class="fire" id="fire">FIRE!</button>
     </div>
@@ -1154,6 +1177,10 @@ function syncUI() {
   powerEl.style.setProperty('--fill', tk.colour);
   powerEl.style.setProperty('--p', (tk.power - 10) / 90);
   angleEl.disabled = powerEl.disabled = !aiming;
+  el('angleDown').disabled = !aiming || tk.angle <= 0;
+  el('angleUp').disabled = !aiming || tk.angle >= 180;
+  el('powerDown').disabled = !aiming || tk.power <= 10;
+  el('powerUp').disabled = !aiming || tk.power >= 100;
   fireBtn.disabled = !aiming;
   fireBtn.style.background = tk.colour;
   fireBtn.style.boxShadow = `0 5px 0 ${tk.dark}`;
@@ -1194,6 +1221,36 @@ powerEl.addEventListener('input', () => {
   powerEl.style.setProperty('--p', (+powerEl.value - 10) / 90);
   requestDraw();
 });
+// A single step of the dial. syncUI does the rest: sliders, readouts, the
+// power fill, the disabled states and a redraw.
+function nudge(dial, delta) {
+  if (G.state !== 'aim') return;
+  const tk = G.tanks[G.cur];
+  if (dial === 'angle') tk.angle = clamp(tk.angle + delta, 0, 180);
+  else tk.power = clamp(tk.power + delta, 10, 100);
+  syncUI();
+}
+
+// Tap for one step; hold to keep going, which beats jabbing at it 40 times.
+function holdToRepeat(btn, act) {
+  let delay, timer;
+  const stop = () => { clearTimeout(delay); clearInterval(timer); };
+  btn.addEventListener('pointerdown', e => {
+    if (btn.disabled) return;
+    e.preventDefault();
+    act();
+    delay = setTimeout(() => { timer = setInterval(act, 55); }, 350);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+  // detail === 0 means the click came from the keyboard, which sends no pointer
+  // events — so this fires for Enter/Space only, never twice for a tap.
+  btn.addEventListener('click', e => { if (e.detail === 0) act(); });
+}
+holdToRepeat(el('angleDown'), () => nudge('angle', -1));
+holdToRepeat(el('angleUp'), () => nudge('angle', 1));
+holdToRepeat(el('powerDown'), () => nudge('power', -1));
+holdToRepeat(el('powerUp'), () => nudge('power', 1));
+
 fireBtn.addEventListener('click', fire);
 
 el('bannerBtn').addEventListener('click', () => { G.round++; newRound(true); });
