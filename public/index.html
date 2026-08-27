@@ -200,10 +200,12 @@
   @media (pointer:coarse){ .keys{display:none} }
 
   /* ---------- narrow viewports (phone held upright) ----------
-     Portrait has height to spare and none to waste sideways, so the FIRE
-     button drops onto its own full-width row and the scoreboard keeps just
-     the colour chips and numbers — the name of whoever is up is already on
-     the turn line directly below. */
+     Portrait has height to spare and none to waste sideways, so the dials
+     stack — angle above power, each on a full-width row — and the FIRE
+     button drops onto its own full-width row below them. The stage flexes,
+     so it gives up the height the taller panel needs. The scoreboard keeps
+     just the colour chips and numbers — the name of whoever is up is
+     already on the turn line directly below. */
   @media (max-width:560px){
     .step{width:32px; height:32px; font-size:19px}
     .dial .track{gap:5px}
@@ -218,7 +220,7 @@
     .score{gap:5px; padding:2px 4px; border-width:2px}
     .score{gap:5px; padding:3px 5px}
     .scores{gap:4px}
-    .dials{grid-template-columns:1fr 1fr}
+    .dials{grid-template-columns:1fr; gap:8px}
     .fire{grid-column:1 / -1; width:100%; min-width:0; margin-top:2px}
     .turnbar{flex-wrap:wrap; row-gap:4px}
     .turnbar .hint{font-size:10px}

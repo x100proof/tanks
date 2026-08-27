@@ -263,9 +263,11 @@ where the browser allows it, `screen.orientation.lock('landscape')` — a
 convenience, not a requirement.
 
 **Portrait** (`max-width: 560px`) has height to spare and none to waste
-sideways, so the FIRE button drops onto its own full-width row and the
-scoreboard keeps only the colour chips and scores — the name of whoever is up
-is on the turn line directly below. The setup screen stacks its name fields.
+sideways, so the angle and power dials stack — each on a full-width row — and
+the FIRE button drops onto its own full-width row below them; the flexing
+stage gives up the height the taller panel needs. The scoreboard keeps only
+the colour chips and scores — the name of whoever is up is on the turn line
+directly below. The setup screen stacks its name fields.
 
 **Short viewports** (`max-height: 560px` — a phone on its side) have the
 opposite problem, so the control bar becomes a translucent overlay across the
