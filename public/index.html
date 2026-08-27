@@ -45,7 +45,12 @@
   .score.dead{opacity:.4}
   .score.dead .name{text-decoration:line-through}
 
-  .hud #full{flex:none; margin-left:10px}
+  /* The familiar four-corner glyph, drawn as paths so it needs no icon font. */
+  .hud #full{flex:none; margin-left:10px; display:inline-flex; align-items:center; gap:7px; white-space:nowrap}
+  #full .icon{width:1.25em; height:1.25em; fill:currentColor; flex:none}
+  #full .i-exit{display:none}
+  #full.on .i-enter{display:none}
+  #full.on .i-exit{display:inline}
   .meta{text-align:center; padding-left:6px; flex:none}
   .meta .lbl{font-size:10px; letter-spacing:.22em; color:var(--muted)}
   .meta .val{font-size:clamp(16px,3vw,24px); line-height:1.15; font-variant-numeric:tabular-nums}
@@ -136,6 +141,14 @@
   .field > .lbl{font-size:11px; letter-spacing:.2em; color:var(--muted)}
   .pill{background:var(--panel-2); color:var(--ink); box-shadow:0 4px 0 #0b1119; padding:10px 20px; border-radius:11px; font-size:clamp(15px,2.6vw,20px)}
   .pill[aria-pressed=true]{background:#ffd54a; color:#0d141c; box-shadow:0 4px 0 #b8912a}
+  .pill.sq{padding:8px 0; width:46px; text-align:center; font-size:22px; line-height:1}
+  .field .val{min-width:3.2ch; text-align:center; font-size:clamp(16px,2.6vw,21px); font-variant-numeric:tabular-nums}
+  .field .note{font-size:11px; letter-spacing:.14em; color:#ffb03a; text-transform:uppercase}
+  .field .note[hidden]{display:none}
+  .pill:disabled{opacity:.35}
+  /* Size is set from JS: the preview is drawn at the battlefield's own scale,
+     so the tank in it is exactly the tank you get. */
+  .preview{border-radius:11px; display:block; border:3px solid var(--panel-2); background:#8fd0ef}
   .players{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
   .pcard{display:flex; align-items:center; gap:8px; background:var(--panel); border-radius:12px; padding:8px 10px; border:3px solid var(--c)}
   .pcard .chip{width:20px; height:20px; border-radius:6px; background:var(--c); flex:none; box-shadow:inset 0 -4px 0 rgba(0,0,0,.3)}
@@ -180,6 +193,10 @@
      the turn line directly below. */
   @media (max-width:560px){
     .score .name{display:none}
+    /* The round number is on the win banner anyway; the scores need the room. */
+    .meta{display:none}
+    .score .num{font-size:19px}
+    .score{gap:5px; padding:2px 4px; border-width:2px}
     .score{gap:5px; padding:3px 5px}
     .scores{gap:4px}
     .dials{grid-template-columns:1fr 1fr}
@@ -208,6 +225,23 @@
 
   <div class="players" id="players"></div>
 
+  <canvas id="sizePreview" class="preview" aria-label="Tank size and blast radius preview"></canvas>
+
+  <div class="field">
+    <span class="lbl">TANK SIZE</span>
+    <button class="pill sq" id="sizeDown" aria-label="Smaller tanks">&minus;</button>
+    <span class="val" id="sizeVal">1.0&times;</span>
+    <button class="pill sq" id="sizeUp" aria-label="Bigger tanks">+</button>
+  </div>
+
+  <div class="field">
+    <span class="lbl">BLAST RADIUS</span>
+    <button class="pill sq" id="blastDown" aria-label="Smaller blast">&minus;</button>
+    <span class="val" id="blastVal">48</span>
+    <button class="pill sq" id="blastUp" aria-label="Bigger blast">+</button>
+    <span class="note" id="blastNote">direct hits only</span>
+  </div>
+
   <button id="start">START BATTLE</button>
 </div>
 
@@ -218,7 +252,23 @@
       <div class="lbl">ROUND</div>
       <div class="val" id="roundVal">1</div>
     </div>
-    <button class="ghost tiny" id="full" title="Full screen">Full</button>
+    <button class="ghost tiny" id="full" title="Full screen">
+      <svg class="icon" viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+        <g class="i-enter">
+          <path d="m 10,16 2,0 0,-4 4,0 0,-2 L 10,10 l 0,6 0,0 z"/>
+          <path d="m 20,10 0,2 4,0 0,4 2,0 L 26,10 l -6,0 0,0 z"/>
+          <path d="m 24,24 -4,0 0,2 L 26,26 l 0,-6 -2,0 0,4 0,0 z"/>
+          <path d="M 12,20 10,20 10,26 l 6,0 0,-2 -4,0 0,-4 0,0 z"/>
+        </g>
+        <g class="i-exit">
+          <path d="m 14,14 -4,0 0,2 6,0 0,-6 -2,0 0,4 0,0 z"/>
+          <path d="m 22,14 0,-4 -2,0 0,6 6,0 0,-2 -4,0 0,0 z"/>
+          <path d="m 20,26 2,0 0,-4 4,0 0,-2 -6,0 0,6 0,0 z"/>
+          <path d="m 10,22 4,0 0,4 2,0 0,-6 -6,0 0,2 0,0 z"/>
+        </g>
+      </svg>
+      <span id="fullLabel">Full Screen</span>
+    </button>
   </header>
 
   <div class="stage">
@@ -276,7 +326,18 @@ const GRAV = 320;                   // world units/s²
 // Full power carries about 1.15 battlefields, so the far side is always
 // reachable but never trivially so.
 const MUZZLE_V = Math.sqrt(GRAV * W * 1.15) / 100;
-const BLAST_R = 48;                 // crater + kill radius
+
+// How big the tanks are, chosen on the setup screen. Everything about a tank —
+// how it is drawn, where its barrel sits, and how big a target it is — scales
+// together, so a bigger tank really is easier to hit.
+const TANK_SIZES = [0.35, 0.45, 0.55, 0.7, 0.85, 1, 1.2, 1.45, 1.75];
+let sizeIdx = 5;                    // 1x by default
+let tankScale = TANK_SIZES[sizeIdx];
+// Blast radius, chosen on the setup screen. Zero is deliberately allowed: it
+// means a shell only ever kills the tank it physically strikes.
+const BLAST_SIZES = [0, 24, 36, 48, 64, 84];
+let blastIdx = 3;
+let blastR = BLAST_SIZES[blastIdx];
 const TANK_R = 20;                  // tank hit radius
 const BEDROCK = H - 2;              // ground can never be dug below this
 
@@ -457,12 +518,16 @@ function flatten(cx, half) {
 
 function carveCrater(cx, cy, r) {
   const t = G.terrain;
-  for (let i = -r; i <= r; i++) {
+  // Even a zero-radius shell leaves a scorch mark, so a near miss still shows
+  // the child exactly where it landed.
+  const mark = Math.max(r, 9);
+  for (let i = -mark; i <= mark; i++) {
     const x = Math.round(cx + i);
     if (x < 0 || x >= W) continue;
-    const dy = Math.sqrt(Math.max(0, r * r - i * i));
-    const bottom = cy + dy;
-    if (bottom > t[x]) t[x] = Math.min(bottom, BEDROCK);
+    if (r > 0 && Math.abs(i) <= r) {
+      const bottom = cy + Math.sqrt(Math.max(0, r * r - i * i));
+      if (bottom > t[x]) t[x] = Math.min(bottom, BEDROCK);
+    }
     G.burn[x] = 1;
   }
   markTerrainDirty();
@@ -476,19 +541,37 @@ function slopeAt(x) {
 // Barrel pivot sits on the turret, which rides the tilted hull.
 function pivotOf(tk) {
   const r = tk.resting ? slopeAt(tk.x) : 0;
-  return { x: tk.x + 18 * Math.sin(r), y: tk.y - 18 * Math.cos(r), rot: r };
+  const up = 18 * tankScale;
+  return { x: tk.x + up * Math.sin(r), y: tk.y - up * Math.cos(r), rot: r };
 }
+// Centre of mass, i.e. what a shell has to hit.
+const coreY = tk => tk.y - 14 * tankScale;
 const aimDir = tk => ({ x: Math.cos(tk.angle * Math.PI / 180), y: -Math.sin(tk.angle * Math.PI / 180) });
 
 // ------------------------------------------------------------------ rounds
 function newRound(advanceStarter) {
   generateTerrain();
 
-  // One slot per player, left to right, with a little jitter inside each slot.
-  const n = G.tanks.length, slot = W / n;
+  // Spread the players across the full width — the outermost two start near
+  // opposite edges — then jitter within a fraction of the gap, so every round
+  // looks different without ever bunching everyone into the middle.
+  const n = G.tanks.length;
+  const margin = 70, usable = W - margin * 2;
+  const step = n > 1 ? usable / (n - 1) : 0;
+  const wobble = n > 1 ? step * 0.18 : usable * 0.25;
+
+  const xs = G.tanks.map((_, i) =>
+    clamp((n > 1 ? margin + step * i : W / 2) + rand(-wobble, wobble), margin, W - margin));
+
+  // Never let jitter pull two tanks within a blast of each other.
+  const minGap = Math.min(step * 0.75, Math.max(blastR * 3, 76 * tankScale));
+  for (let i = 1; i < xs.length; i++) {
+    if (xs[i] - xs[i - 1] < minGap) xs[i] = Math.min(xs[i - 1] + minGap, W - margin);
+  }
+
   G.tanks.forEach((tk, i) => {
-    tk.x = Math.round(clamp(slot * (i + .5) + rand(-slot * .26, slot * .26), 80, W - 80));
-    flatten(tk.x, 26);
+    tk.x = Math.round(xs[i]);
+    flatten(tk.x, Math.round(26 * tankScale));
     tk.y = G.terrain[ix(tk.x)];
     tk.vy = 0; tk.dead = false; tk.resting = true;
     // Aim inwards to start: left half points right, right half points left.
@@ -524,7 +607,8 @@ function fire() {
   const tk = G.tanks[G.cur];
   const p = pivotOf(tk), d = aimDir(tk);
   const speed = tk.power * MUZZLE_V;
-  G.shell = { x: p.x + d.x * 34, y: p.y + d.y * 34, vx: d.x * speed, vy: d.y * speed };
+  const muzzle = 34 * tankScale;
+  G.shell = { x: p.x + d.x * muzzle, y: p.y + d.y * muzzle, vx: d.x * speed, vy: d.y * speed };
   G.trail = [{ x: G.shell.x, y: G.shell.y }];
   G.drag = null;
   G.state = 'fly';
@@ -543,7 +627,9 @@ function stepShell(h) {
 
   // Direct hit on any tank still in the game.
   for (const tk of G.tanks) {
-    if (!tk.dead && Math.hypot(s.x - tk.x, s.y - (tk.y - 14)) < TANK_R) { impact(s.x, s.y); return true; }
+    if (!tk.dead && Math.hypot(s.x - tk.x, s.y - coreY(tk)) < TANK_R * tankScale) {
+      impact(s.x, s.y, tk); return true;
+    }
   }
   // Ground — including the extended ground drawn past the world edges (§2), so
   // a shell can never fly through scenery the player can see. Beyond the screen
@@ -560,22 +646,27 @@ function stepShell(h) {
   return false;
 }
 
-function impact(x, y) {
+function impact(x, y, direct) {
   G.shell = null;
   whistleStop();
 
   // Resolve the blast against tank positions before the ground changes shape.
+  // At zero radius there is no splash at all: only the tank the shell actually
+  // struck is destroyed, so a direct hit becomes the only way to win.
   G.killed = false;
+  const reach = blastR > 0 ? blastR + TANK_R * .6 * tankScale : 0;
   for (const tk of G.tanks) {
     if (tk.dead) continue;
-    if (Math.hypot(x - tk.x, y - (tk.y - 14)) < BLAST_R + TANK_R * 0.6) { tk.dead = true; G.killed = true; }
+    const caught = tk === direct
+      || (reach > 0 && Math.hypot(x - tk.x, y - coreY(tk)) < reach);
+    if (caught) { tk.dead = true; G.killed = true; }
   }
 
-  carveCrater(x, y, BLAST_R);
+  carveCrater(x, y, blastR);
   spawnExplosion(x, y);
   for (const tk of G.tanks) if (tk.y < G.terrain[ix(tk.x)] - 0.5) tk.resting = false;
 
-  G.shake = 16;
+  G.shake = 8 + blastR * .17;
   G.state = 'boom';
   G.timer = 0;
   sfxBoom();
@@ -583,15 +674,17 @@ function impact(x, y) {
 }
 
 function spawnExplosion(x, y) {
-  for (let i = 0; i < 46; i++) {
-    const a = rand(0, Math.PI * 2), sp = rand(40, 320);
+  const r = Math.max(blastR, 14);
+  const k = r / 48;
+  for (let i = 0; i < Math.round(46 * clamp(k, .45, 1.3)); i++) {
+    const a = rand(0, Math.PI * 2), sp = rand(40, 320) * clamp(k, .5, 1.4);
     G.parts.push({
       x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
       life: rand(.35, .95), max: 1, r: rand(2, 7),
       c: ['#fff3b0', '#ffb03a', '#ff6a2a', '#8a5a34'][(Math.random() * 4) | 0],
     });
   }
-  G.parts.push({ flash: true, x, y, life: .26, max: .26, r: BLAST_R * 1.7 });
+  G.parts.push({ flash: true, x, y, life: .26, max: .26, r: r * 1.7 });
 }
 
 const scoreLine = () => G.tanks.map(t => `${t.name} ${t.score}`).join(' · ');
@@ -828,53 +921,33 @@ function drawTank(tk) {
   const rot = tk.resting ? slopeAt(tk.x) : 0;
   const c = tk.dead ? '#4a4a4a' : tk.colour;
   const d = tk.dead ? '#2c2c2c' : tk.dark;
+  const ts = tankScale;
 
   ctx.save();
   ctx.translate(tk.x, tk.y);
   ctx.rotate(rot);
-
-  ctx.fillStyle = 'rgba(0,0,0,.22)';
-  ctx.beginPath(); ctx.ellipse(0, 1, 34, 6, 0, 0, Math.PI * 2); ctx.fill();
-
-  ctx.fillStyle = '#2c3440';
-  roundRect(-32, -14, 64, 14, 7); ctx.fill();
-  ctx.fillStyle = '#59646f';
-  for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.arc(i * 9, -7, 3.4, 0, Math.PI * 2); ctx.fill(); }
-
-  ctx.fillStyle = c;
-  roundRect(-26, -30, 52, 18, 6); ctx.fill();
-  ctx.fillStyle = d;
-  roundRect(-26, -17, 52, 5, 2.5); ctx.fill();
-
-  ctx.fillStyle = c;
-  ctx.beginPath(); ctx.arc(0, -30, 13, Math.PI, 0); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.28)';
-  ctx.beginPath(); ctx.arc(-4, -33, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.scale(ts, ts);
+  tankBody(ctx, c, d);
   ctx.restore();
 
   // Barrel is drawn in world space so it always shows the true firing angle.
   const p = pivotOf(tk), dir = aimDir(tk);
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = d; ctx.lineWidth = 11;
-  ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + dir.x * 36, p.y + dir.y * 36); ctx.stroke();
-  ctx.strokeStyle = c; ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + dir.x * 34, p.y + dir.y * 34); ctx.stroke();
-  ctx.restore();
+  paintBarrel(ctx, p.x, p.y, dir.x, dir.y, 34 * ts, c, d, 6 * ts);
 
   // Name plate, so 3- and 4-player games stay legible. Grows as the world
   // shrinks, so it stays readable on a small phone screen.
   const fs = Math.round(17 / clamp(view.s / 0.85, 0.5, 1));
+  const top = tk.y - 46 * ts;
   ctx.font = `700 ${fs}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.45)';
-  ctx.strokeText(tk.name, tk.x, tk.y - 46 - fs * .4);
+  ctx.strokeText(tk.name, tk.x, top - fs * .4);
   ctx.fillStyle = tk.dead ? '#9aa6b3' : '#fff';
-  ctx.fillText(tk.name, tk.x, tk.y - 46 - fs * .4);
+  ctx.fillText(tk.name, tk.x, top - fs * .4);
 
   // Knocked out: a drawn cross, not an emoji — no font to depend on.
   if (tk.dead) {
-    const cy = tk.y - 46 - fs * 1.9, r = fs * .55;
+    const cy = top - fs * 1.9, r = fs * .55;
     ctx.save();
     ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = fs * .42;
@@ -883,7 +956,7 @@ function drawTank(tk) {
       ctx.moveTo(tk.x - r, cy - r); ctx.lineTo(tk.x + r, cy + r);
       ctx.moveTo(tk.x + r, cy - r); ctx.lineTo(tk.x - r, cy + r);
       ctx.stroke();
-      ctx.strokeStyle = '#e8edf3'; ctx.lineWidth = fs * .24;   // second pass draws the mark
+      ctx.strokeStyle = '#e8edf3'; ctx.lineWidth = fs * .24;
       if (pass) break;
     }
     ctx.restore();
@@ -892,13 +965,14 @@ function drawTank(tk) {
 
 function drawAim(tk) {
   const p = pivotOf(tk), d = aimDir(tk);
-  const len = 46 + tk.power * 0.85;
+  const start = 42 * tankScale;
+  const len = start + 4 + tk.power * 0.85;
   ctx.save();
   ctx.setLineDash([9, 11]);
   ctx.lineWidth = 5; ctx.lineCap = 'round';
   ctx.strokeStyle = 'rgba(255,255,255,.75)';
   ctx.beginPath();
-  ctx.moveTo(p.x + d.x * 42, p.y + d.y * 42);
+  ctx.moveTo(p.x + d.x * start, p.y + d.y * start);
   ctx.lineTo(p.x + d.x * len, p.y + d.y * len);
   ctx.stroke();
   ctx.restore();
@@ -953,14 +1027,48 @@ function drawParticles() {
   }
 }
 
-function roundRect(x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+// The hull, treads and turret in tank-local units, origin at the centre of the
+// tracks. Shared by the battlefield and the setup screen's size preview.
+function tankBody(c, colour, dark) {
+  c.fillStyle = 'rgba(0,0,0,.22)';
+  c.beginPath(); c.ellipse(0, 1, 34, 6, 0, 0, Math.PI * 2); c.fill();
+
+  c.fillStyle = '#2c3440';
+  roundRect(c, -32, -14, 64, 14, 7); c.fill();
+  c.fillStyle = '#59646f';
+  for (let i = -3; i <= 3; i++) { c.beginPath(); c.arc(i * 9, -7, 3.4, 0, Math.PI * 2); c.fill(); }
+
+  c.fillStyle = colour;
+  roundRect(c, -26, -30, 52, 18, 6); c.fill();
+  c.fillStyle = dark;
+  roundRect(c, -26, -17, 52, 5, 2.5); c.fill();
+
+  c.fillStyle = colour;
+  c.beginPath(); c.arc(0, -30, 13, Math.PI, 0); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.28)';
+  c.beginPath(); c.arc(-4, -33, 4.5, 0, Math.PI * 2); c.fill();
+}
+
+// A barrel of length `len` from (px,py) along (dx,dy), in whatever space the
+// context is currently in.
+function paintBarrel(c, px, py, dx, dy, len, colour, dark, w) {
+  c.save();
+  c.lineCap = 'round';
+  c.strokeStyle = dark; c.lineWidth = w * 1.85;
+  c.beginPath(); c.moveTo(px, py); c.lineTo(px + dx * (len + w * .35), py + dy * (len + w * .35)); c.stroke();
+  c.strokeStyle = colour; c.lineWidth = w;
+  c.beginPath(); c.moveTo(px, py); c.lineTo(px + dx * len, py + dy * len); c.stroke();
+  c.restore();
 }
 
 // ------------------------------------------------------------------ touch / mouse aiming
@@ -1116,7 +1224,8 @@ fullBtn.addEventListener('click', async () => {
 
 function syncFullLabel() {
   const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
-  fullBtn.textContent = on ? 'Exit' : 'Full';
+  fullBtn.classList.toggle('on', on);                 // swaps the glyph
+  el('fullLabel').textContent = on ? 'Exit Full Screen' : 'Full Screen';
   fullBtn.title = on ? 'Leave full screen' : 'Full screen';
   relayout();
 }
@@ -1162,20 +1271,119 @@ function renderPlayers() {
   });
 }
 
-el('setup').querySelectorAll('.pill').forEach(btn => {
+// `.pill[data-n]` and not just `.pill`: the tank-size +/- buttons are pills too.
+el('setup').querySelectorAll('.pill[data-n]').forEach(btn => {
   btn.addEventListener('click', () => {
     playerCount = +btn.dataset.n;
-    el('setup').querySelectorAll('.pill').forEach(b =>
+    el('setup').querySelectorAll('.pill[data-n]').forEach(b =>
       b.setAttribute('aria-pressed', String(+b.dataset.n === playerCount)));
     renderPlayers();
   });
 });
+
+// A little diorama of one tank at the chosen size, so the choice is visible
+// rather than a number.
+const previewCv = el('sizePreview'), pctx = previewCv.getContext('2d');
+const BIGGEST = TANK_SIZES[TANK_SIZES.length - 1];
+
+// The preview is drawn at exactly the scale the battlefield uses (view.s), so
+// the tank shown here is the same number of pixels as the tank you play with.
+// The frame is sized to hold the largest option, so switching sizes never
+// rescales the picture — only the tank grows.
+function drawSizePreview() {
+  const s = view.s;
+  const biggestBlast = BLAST_SIZES[BLAST_SIZES.length - 1];
+  // Sized for the largest of either setting, so the frame never jumps as the
+  // player steps through the options — only what is drawn inside it changes.
+  const boxW = Math.round(clamp(Math.max(64 * BIGGEST, 2 * biggestBlast) * s + 46, 130, 340));
+  const boxH = Math.round(clamp(Math.max(46 * BIGGEST, biggestBlast + 24) * s + 34, 78, 210));
+  previewCv.style.width = boxW + 'px';
+  previewCv.style.height = boxH + 'px';
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  previewCv.width = Math.round(boxW * dpr);
+  previewCv.height = Math.round(boxH * dpr);
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const sky = pctx.createLinearGradient(0, 0, 0, boxH);
+  sky.addColorStop(0, '#4fa8dd'); sky.addColorStop(1, '#cfeaf8');
+  pctx.fillStyle = sky; pctx.fillRect(0, 0, boxW, boxH);
+
+  const gy = boxH - 13;
+  pctx.fillStyle = '#7a4c2b'; pctx.fillRect(0, gy, boxW, boxH - gy);
+  pctx.fillStyle = '#63c53f'; pctx.fillRect(0, gy, boxW, 5);
+  pctx.fillStyle = '#3f9a27'; pctx.fillRect(0, gy + 5, boxW, 2);
+
+  const ts = tankScale * s;                 // identical to the battlefield
+  const cx = boxW / 2, core = gy + 1 - 14 * ts;
+
+  // How near a shell has to land to be lethal, drawn at the same scale.
+  if (blastR > 0) {
+    pctx.save();
+    pctx.beginPath(); pctx.arc(cx, core, blastR * s, 0, Math.PI * 2);
+    pctx.fillStyle = 'rgba(255,120,40,.20)'; pctx.fill();
+    pctx.setLineDash([6, 6]); pctx.lineWidth = 2; pctx.strokeStyle = 'rgba(255,120,40,.95)';
+    pctx.stroke();
+    pctx.restore();
+  }
+
+  const { colour, dark } = PALETTE[0];
+  pctx.save();
+  pctx.translate(cx, gy + 1);
+  pctx.scale(ts, ts);
+  tankBody(pctx, colour, dark);
+  pctx.restore();
+
+  const a = 45 * Math.PI / 180;
+  paintBarrel(pctx, cx, gy + 1 - 18 * ts, Math.cos(a), -Math.sin(a), 34 * ts, colour, dark, 6 * ts);
+
+  // Zero radius: mark the tank itself as the only target.
+  if (blastR === 0) {
+    pctx.save();
+    pctx.strokeStyle = 'rgba(255,120,40,.95)'; pctx.lineWidth = 2;
+    const r = 13 * ts + 5;
+    pctx.beginPath(); pctx.arc(cx, core, r, 0, Math.PI * 2); pctx.stroke();
+    pctx.beginPath();
+    pctx.moveTo(cx - r - 6, core); pctx.lineTo(cx - r + 3, core);
+    pctx.moveTo(cx + r - 3, core); pctx.lineTo(cx + r + 6, core);
+    pctx.moveTo(cx, core - r - 6); pctx.lineTo(cx, core - r + 3);
+    pctx.moveTo(cx, core + r - 3); pctx.lineTo(cx, core + r + 6);
+    pctx.stroke();
+    pctx.restore();
+  }
+  previewScale = ts;
+}
+let previewScale = 0;
+
+function setBlast(i) {
+  blastIdx = clamp(i, 0, BLAST_SIZES.length - 1);
+  blastR = BLAST_SIZES[blastIdx];
+  el('blastVal').textContent = blastR;
+  el('blastNote').hidden = blastR !== 0;
+  el('blastDown').disabled = blastIdx === 0;
+  el('blastUp').disabled = blastIdx === BLAST_SIZES.length - 1;
+  drawSizePreview();
+}
+el('blastDown').addEventListener('click', () => setBlast(blastIdx - 1));
+el('blastUp').addEventListener('click', () => setBlast(blastIdx + 1));
+
+function setSize(i) {
+  sizeIdx = clamp(i, 0, TANK_SIZES.length - 1);
+  tankScale = TANK_SIZES[sizeIdx];
+  el('sizeVal').textContent = tankScale.toFixed(2).replace(/0$/, '') + '\u00d7';
+  el('sizeDown').disabled = sizeIdx === 0;
+  el('sizeUp').disabled = sizeIdx === TANK_SIZES.length - 1;
+  drawSizePreview();
+}
+el('sizeDown').addEventListener('click', () => setSize(sizeIdx - 1));
+el('sizeUp').addEventListener('click', () => setSize(sizeIdx + 1));
 
 function showSetup() {
   G.state = 'setup';
   whistleStop();
   hideBanner();
   setupEl.hidden = false;
+  drawSizePreview();
 }
 
 el('start').addEventListener('click', () => {
@@ -1223,18 +1431,30 @@ function fitCanvas() {
   ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * view.offX, dpr * view.offY);
   requestDraw();                                   // the canvas was just cleared
 }
-const relayout = () => { applyLayout(); fitCanvas(); };
+const relayout = () => {
+  applyLayout();
+  fitCanvas();
+  if (!setupEl.hidden) drawSizePreview();      // view.s may have changed
+};
 addEventListener('resize', relayout);
 addEventListener('orientationchange', relayout);
 coarse.addEventListener?.('change', relayout);
 new ResizeObserver(fitCanvas).observe(cv);        // catches layout changes too
 
 // Handle for the browser console and the Playwright smoke test.
-window.__debug = { G, view, fire, newRound, startGame, worldW: () => W, worldH: () => H };
+window.__debug = {
+  G, view, fire, newRound, startGame,
+  worldW: () => W, worldH: () => H,
+  tankScale: () => tankScale, sizeIdx: () => sizeIdx, sizes: () => TANK_SIZES.slice(),
+  blastR: () => blastR, blastIdx: () => blastIdx, blasts: () => BLAST_SIZES.slice(),
+  previewScale: () => previewScale, gameTankScale: () => tankScale * view.s,
+};
 
 applyLayout();
 fitCanvas();
 renderPlayers();
+setSize(sizeIdx);
+setBlast(blastIdx);
 generateTerrain();                            // backdrop behind the setup screen
 startGame([PALETTE[0].name, PALETTE[1].name]);
 showSetup();                                  // ...but start on the setup screen

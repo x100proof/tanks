@@ -26,6 +26,16 @@ step. The whole game is one file: [`public/index.html`](public/index.html).
 - **Keyboard** — `←`/`→` angle, `↑`/`↓` power (hold `shift` for bigger steps),
   `space` to fire.
 
+## Setting up a game
+
+Besides the number of players (2–4) and their names, the setup screen sets:
+
+- **Tank size**, from 0.35× to 1.75×. The preview shows the tank at exactly the
+  size it will be in the game, and a bigger tank really is a bigger target.
+- **Blast radius**, from 0 to 84. The preview draws the lethal radius as a ring
+  around the tank at the same scale. **Set it to 0 and only direct hits count** —
+  no splash at all.
+
 The battlefield is **square**, so the game plays the same held upright or
 sideways, on a phone or a desktop — it never asks you to rotate anything. The
 **Full** button in the top-right corner goes full screen, and turns into

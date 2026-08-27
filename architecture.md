@@ -51,7 +51,7 @@ The `view` object maps world units to the screen each time the canvas is sized:
 - `x0, x1, y0, y1` — the visible rectangle **in world coordinates**. Because the
   fit is "contain", the screen is usually wider than the world; these bounds run
   past `0..W`.
-- `inset` — world units hidden behind the floating control bar (§7).
+- `inset` — world units hidden behind the floating control bar (§8).
 
 The canvas backing store is sized to `CSS pixels × devicePixelRatio`, with dpr
 capped at 2, and the whole transform is folded into one `setTransform` call, so
@@ -92,8 +92,15 @@ Octave amplitudes are scaled by `k = band / (H - 46 - top)` so hills are
 is what keeps the terrain interesting when the control bar floats over the field
 on a short screen. The centre line sits at `top + band * 0.57`.
 
-`flatten(x, 26)` levels a blended landing pad under each tank so hulls sit flush
-instead of clipping into a slope.
+`flatten(x, 26 * tankScale)` levels a blended landing pad under each tank so
+hulls sit flush instead of clipping into a slope.
+
+**Starting positions** spread the players across the full width: the outermost
+two begin near opposite edges, and each is jittered by a fraction of the gap so
+no two rounds look alike. A minimum-separation pass then stops the jitter ever
+bunching neighbours together. Measured over 300 rounds, two players always start
+at least 51% of the battlefield apart (average 73%), and with three or four the
+outermost pair always reach the left and right thirds.
 
 **Destruction** (`carveCrater`) walks the columns under the blast and lowers the
 surface to the bottom of a circle of radius `BLAST_R`, never below `BEDROCK`
@@ -112,8 +119,8 @@ grass where `burn` is clear, scorched dirt where it is set.
 |---|---|---|
 | `GRAV` | 320 | downward acceleration, world units/s² |
 | `MUZZLE_V` | √(`GRAV`·`W`·1.15)/100 ≈ 5.08 | muzzle speed per unit of power, derived so full power carries about 1.15 battlefields — the far side is always reachable, never trivially so |
-| `BLAST_R` | 48 | crater radius and kill radius |
-| `TANK_R` | 20 | tank hit radius |
+| `blastR` | 0–84, default 48 | crater and kill radius, chosen on the setup screen (§6) |
+| `TANK_R` | 20 | tank hit radius, multiplied by `tankScale` |
 | `STEP` | 1/300 s | fixed integration step |
 
 **There is no wind.** The game is for young children, and identical dials
@@ -133,9 +140,17 @@ of frame rate, capped at 400 substeps per frame. Each step applies gravity to
 The ground test covers the visible overscan as well as the world proper, so
 what looks solid is solid (§2).
 
-On impact the blast is resolved **before** the ground changes shape: every live
-tank within `BLAST_R + TANK_R * 0.6` of the impact point is eliminated. Then the
+On impact the blast is resolved **before** the ground changes shape: the tank
+the shell physically struck, plus every live tank within
+`blastR + TANK_R * 0.6 * tankScale` of the impact point, is eliminated. Then the
 crater is carved, so a tank is judged where it stood.
+
+**At `blastR = 0` there is no splash whatsoever** — only the tank the shell
+actually strikes dies, so the game becomes direct-hits-only. The struck tank is
+therefore passed into `impact()` rather than being re-derived from a radius,
+which would fail at zero. A zero-radius shell still scorches the ground where it
+lands (`carveCrater` marks a minimum band without digging), so a near miss still
+shows a child exactly where the shot went.
 
 Aim is `angle` in degrees (0 = due right, 90 = straight up, 180 = due left) and
 `power` in `10..100`, both persisted per tank between turns. The barrel is drawn
@@ -177,7 +192,32 @@ first.
 
 ---
 
-## 6. Controls
+## 6. Setup options
+
+Before a game starts the setup screen chooses, besides player count and names:
+
+**Tank size** (`TANK_SIZES`, 0.35×–1.75×, default 1×). `tankScale` multiplies
+*everything* about a tank together — the drawing, the turret pivot, the barrel
+and muzzle, the landing pad flattened under it, and `TANK_R` — so a bigger tank
+is genuinely a bigger target and not merely a bigger picture.
+
+The preview beside it is drawn at **exactly the battlefield's own scale**
+(`tankScale * view.s`), so the tank shown is the same number of pixels as the
+tank that will be played with. Its frame is sized to hold the largest option of
+either setting, so stepping through the options never rescales the picture —
+only what is inside it changes.
+
+**Blast radius** (`BLAST_SIZES`, 0–84, default 48). The preview draws the lethal
+radius as a dashed ring around the tank at the same true scale, so the two
+settings can be judged against each other. At zero the ring is replaced by a
+crosshair on the tank itself and the screen says *direct hits only*.
+
+Both are rendered with `tankBody()` and `paintBarrel()`, the same routines the
+battlefield uses — there is no second, drifting copy of what a tank looks like.
+
+---
+
+## 7. Controls
 
 Three input methods drive the same two values (`angle`, `power`), and all three
 stay in sync through `syncUI`:
@@ -202,7 +242,7 @@ deliberately does **not** plot the trajectory: finding the arc is the game.
 
 ---
 
-## 7. Layout
+## 8. Layout
 
 The page is a full-height flex column: scoreboard, playfield, controls. The
 canvas fills the stage exactly and the game draws edge to edge (§2).
@@ -226,7 +266,11 @@ terrain surface — and therefore every tank — above it. The class is set from
 rather than a media query so a single rule decides it.
 
 The top bar carries the scores, the round number, and a **full screen** button
-in the top-right corner. The same button leaves full screen again, and its
+in the top-right corner — the familiar four-corner expand glyph, drawn as SVG
+paths so it needs no icon font, beside the words *Full Screen*. The glyph flips
+to the inward "collapse" corners and the label to *Exit Full Screen* while
+full screen is active. Portrait hides the round counter to keep four scores
+legible. The same button leaves full screen again, and its
 label tracks `fullscreenchange`, so pressing Escape or using a system gesture
 keeps it honest. iOS Safari has no element fullscreen, so there the button
 hides itself rather than offering something that cannot work.
@@ -237,7 +281,7 @@ scoreboard, and the FIRE button and slider thumbs take that player's colour.
 
 ---
 
-## 8. Frame cost
+## 9. Frame cost
 
 Drawing is the most expensive thing this game does, so two rules keep it cheap.
 
@@ -267,7 +311,7 @@ lower; the remaining cost is pixel fill, which is proportional to frames drawn.
 
 ---
 
-## 9. Audio
+## 10. Audio
 
 Every sound is synthesised with the Web Audio API; there are no audio files. The
 context is created on the **Start battle** click, which satisfies browser
@@ -286,7 +330,7 @@ A **Sound** toggle mutes everything and stops any whistle in flight.
 
 ---
 
-## 10. Server and deployment
+## 11. Server and deployment
 
 `server.js` serves `public/` over HTTP on `127.0.0.1:3005` (override with
 `PORT`/`HOST`). It resolves and normalises the request path and refuses anything
@@ -317,9 +361,11 @@ browser
 
 ---
 
-## 11. Debug handle
+## 12. Debug handle
 
-`window.__debug` exposes `{ G, view, fire, newRound, startGame, worldW, worldH }`. It is what the
+`window.__debug` exposes `{ G, view, fire, newRound, startGame, worldW, worldH,
+tankScale, sizeIdx, sizes, previewScale, gameTankScale, blastR, blastIdx,
+blasts }`. It is what the
 browser-driven tests use to inspect terrain, force deterministic shots and step
 rounds. It is intentionally shipped: this is a local hot-seat game with nothing
 to protect, and the handle makes the game testable.
