@@ -1,0 +1,19 @@
+[Unit]
+Description=Tank Duel — artillery game (static Node server on :3005)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/code/tanks
+Environment=NODE_ENV=production
+Environment=PORT=3005
+# Login shell so nvm's node is on PATH; exec so systemd tracks node directly.
+ExecStart=/bin/bash -lc 'exec node server.js'
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

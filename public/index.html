@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0d141c">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Tank Duel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💥</text></svg>">
+<style>
+  :root{
+    --panel:#16202c; --panel-2:#1e2c3c; --ink:#f2f7ff; --muted:#93a7bd;
+    --sky:linear-gradient(#4fa8dd, #93d3f0 55%, #d7f0fb);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; overflow:hidden; overscroll-behavior:none}
+  body{
+    margin:0; background:#0d141c; color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-weight:800; -webkit-text-size-adjust:100%; touch-action:manipulation;
+    -webkit-user-select:none; user-select:none;
+    display:flex; justify-content:center;
+  }
+
+  .wrap{
+    width:100%; max-width:1200px; height:100vh; height:100dvh;
+    display:flex; flex-direction:column; gap:8px;
+    padding:8px calc(8px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+  }
+
+  /* ---------- top bar: scores + wind ---------- */
+  .hud{
+    flex:none; display:flex; align-items:center; gap:10px;
+    background:var(--panel); border-radius:14px; padding:8px 14px;
+  }
+  .scores{display:flex; align-items:center; gap:8px; flex:1; min-width:0; flex-wrap:nowrap; overflow:hidden}
+  .score{display:flex; align-items:center; gap:7px; min-width:0; padding:3px 7px; border-radius:10px; border:3px solid transparent}
+  .score .chip{width:20px; height:20px; border-radius:6px; flex:none; box-shadow:inset 0 -4px 0 rgba(0,0,0,.3)}
+  .score .name{font-size:clamp(11px,1.7vw,16px); letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:9ch}
+  .score .num{font-size:clamp(20px,3.6vw,34px); line-height:1; font-variant-numeric:tabular-nums}
+  .score.active{border-color:rgba(255,255,255,.35); background:rgba(255,255,255,.06)}
+  .score.dead{opacity:.4}
+  .score.dead .name{text-decoration:line-through}
+
+  .wind{text-align:center; padding-left:6px; flex:none}
+  .wind .lbl{font-size:10px; letter-spacing:.22em; color:var(--muted)}
+  .wind .gauge{display:flex; align-items:center; justify-content:center; gap:6px; font-size:clamp(16px,3vw,24px); line-height:1.15}
+  .wind .arrows{color:#6fd3ff; letter-spacing:-2px}
+  .wind .val{font-variant-numeric:tabular-nums; min-width:2ch}
+  .wind.calm .val{color:var(--muted)}
+
+  /* ---------- stage (flexes to fill; canvas letterboxes into it) ---------- */
+  .stage{
+    position:relative; flex:1 1 auto; min-height:0;
+    border-radius:16px; overflow:hidden; background:var(--sky);
+    box-shadow:0 8px 26px rgba(0,0,0,.45);
+  }
+  /* The canvas fills the stage exactly; the game draws edge-to-edge itself. */
+  canvas{display:block; width:100%; height:100%; touch-action:none}
+
+  .banner{
+    position:absolute; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; background:rgba(8,14,22,.74); backdrop-filter:blur(3px); text-align:center; padding:14px;
+  }
+  .banner[hidden]{display:none}
+  .banner h2{margin:0; font-size:clamp(24px,5.5vw,60px); line-height:1.05; text-shadow:0 5px 0 rgba(0,0,0,.35)}
+  .banner p{margin:0; color:var(--muted); font-size:clamp(11px,2vw,17px)}
+  .banner .row{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
+
+  /* ---------- controls ---------- */
+  .controls{flex:none; background:var(--panel); border-radius:14px; padding:8px 12px 10px; display:flex; flex-direction:column; gap:8px}
+
+  .turnbar{display:flex; align-items:center; gap:8px; font-size:clamp(13px,2.3vw,18px)}
+  .turnbar .chip{width:18px; height:18px; border-radius:6px; flex:none; box-shadow:inset 0 -3px 0 rgba(0,0,0,.3)}
+  .turnbar .hint{font-size:11px; color:var(--muted); letter-spacing:.14em; white-space:nowrap}
+  .turnbar .spacer{flex:1}
+  #turnText{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:14ch}
+  .keys{font-size:11px; color:var(--muted); letter-spacing:.04em; font-weight:600; white-space:nowrap}
+  kbd{background:var(--panel-2); border-radius:4px; padding:1px 5px; font:inherit; font-size:10px}
+
+  .dials{display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end}
+  .dial label{display:flex; justify-content:space-between; align-items:baseline; font-size:11px; letter-spacing:.18em; color:var(--muted); margin-bottom:2px}
+  .dial .read{font-size:clamp(17px,3vw,26px); color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:0}
+
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:38px; background:transparent; cursor:pointer; margin:0; touch-action:none}
+  input[type=range]::-webkit-slider-runnable-track{height:14px; border-radius:99px; background:var(--panel-2); box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-track{height:14px; border-radius:99px; background:var(--panel-2); box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:36px; height:36px; margin-top:-11px; border-radius:50%;
+    background:var(--accent,#fff); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5);
+  }
+  input[type=range]::-moz-range-thumb{width:28px; height:28px; border-radius:50%; background:var(--accent,#fff); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5)}
+  input[type=range]:focus-visible{outline:3px solid #fff; outline-offset:4px; border-radius:99px}
+  input[type=range]:disabled{opacity:.45; cursor:default}
+
+  button{
+    font:inherit; font-size:clamp(14px,2.6vw,20px); letter-spacing:.06em; color:#0d141c; background:#ffd54a;
+    border:none; border-radius:12px; padding:12px 22px; cursor:pointer; box-shadow:0 5px 0 #b8912a;
+    transition:transform .06s, box-shadow .06s; -webkit-tap-highlight-color:transparent;
+  }
+  button:active{transform:translateY(4px); box-shadow:0 1px 0 #b8912a !important}
+  button:disabled{opacity:.4; cursor:default; transform:none}
+  button:focus-visible{outline:3px solid #fff; outline-offset:3px}
+  button.ghost{background:var(--panel-2); color:var(--ink); box-shadow:0 4px 0 #0b1119}
+  button.tiny{font-size:13px; padding:7px 11px; border-radius:9px; letter-spacing:0}
+  .fire{min-width:170px; height:56px; padding:0 26px; color:#fff}
+
+  /* ---------- setup screen ---------- */
+  .setup{
+    position:fixed; inset:0; z-index:40; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:clamp(10px,2.4vh,22px); padding:16px; overflow:auto;
+    background:rgba(9,15,23,.86); backdrop-filter:blur(4px);
+  }
+  .setup[hidden]{display:none}
+  .setup h1{
+    margin:0; font-size:clamp(28px,7vw,64px); letter-spacing:.06em; line-height:1;
+    background:linear-gradient(#ffe27a,#ff9d2e); -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 4px 0 rgba(0,0,0,.4));
+  }
+  .setup .sub{margin:-6px 0 0; color:var(--muted); font-size:clamp(11px,2vw,15px); font-weight:600; letter-spacing:.18em}
+  .field{display:flex; align-items:center; gap:10px}
+  .field > .lbl{font-size:11px; letter-spacing:.2em; color:var(--muted)}
+  .pill{background:var(--panel-2); color:var(--ink); box-shadow:0 4px 0 #0b1119; padding:10px 20px; border-radius:11px; font-size:clamp(15px,2.6vw,20px)}
+  .pill[aria-pressed=true]{background:#ffd54a; color:#0d141c; box-shadow:0 4px 0 #b8912a}
+  .players{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
+  .pcard{display:flex; align-items:center; gap:8px; background:var(--panel); border-radius:12px; padding:8px 10px; border:3px solid var(--c)}
+  .pcard .chip{width:20px; height:20px; border-radius:6px; background:var(--c); flex:none; box-shadow:inset 0 -4px 0 rgba(0,0,0,.3)}
+  .pcard input{
+    font:inherit; font-size:clamp(13px,2.2vw,17px); font-weight:800; color:var(--ink); background:transparent;
+    border:none; border-bottom:2px solid var(--panel-2); width:8.5ch; padding:3px 0; letter-spacing:.04em;
+  }
+  .pcard input:focus{outline:none; border-bottom-color:var(--c)}
+
+  /* ---------- short viewports (phone in landscape) ---------- */
+  /* The controls float over the battlefield so the field keeps the full
+     height; the game reserves matching dead space at the bottom of the
+     world (see view.inset) so no terrain or tank hides behind them. */
+  @media (max-height:560px){
+    .wrap{position:relative; gap:6px; padding:5px calc(5px + env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) calc(5px + env(safe-area-inset-left))}
+    .controls{
+      position:absolute; z-index:5;
+      left:calc(5px + env(safe-area-inset-left)); right:calc(5px + env(safe-area-inset-right)); bottom:calc(5px + env(safe-area-inset-bottom));
+      background:rgba(20,30,42,.82); backdrop-filter:blur(8px);
+    }
+    .hud{padding:4px 10px; border-radius:11px}
+    .score .num{font-size:24px}
+    .controls{padding:5px 9px 7px; gap:5px; border-radius:11px}
+    .dials{gap:9px}
+    .dial label{margin-bottom:0}
+    input[type=range]{height:30px}
+    input[type=range]::-webkit-slider-thumb{width:30px; height:30px; margin-top:-8px}
+    .fire{height:44px; min-width:120px; padding:0 16px}
+    .banner{gap:9px}
+    .setup{gap:9px}
+    .setup h1{font-size:30px}
+    .pcard{padding:5px 8px}
+  }
+  @media (pointer:coarse){ .keys{display:none} }
+  @media (pointer:fine){ #full{display:none} }
+
+  /* ---------- portrait lock ---------- */
+  .rotate{display:none}
+  @media (orientation:portrait) and (pointer:coarse){
+    .wrap,.setup{display:none !important}
+    .rotate{
+      display:flex; position:fixed; inset:0; z-index:60; background:#0d141c;
+      flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:28px;
+    }
+  }
+  .rotate .phone{font-size:64px; animation:tip 2.2s ease-in-out infinite; transform-origin:50% 50%}
+  .rotate h2{margin:0; font-size:24px}
+  .rotate p{margin:0; color:var(--muted); font-size:15px; font-weight:600; max-width:22em; line-height:1.5}
+  @keyframes tip{0%,45%{transform:rotate(0)} 60%,90%{transform:rotate(-90deg)} 100%{transform:rotate(0)}}
+</style>
+</head>
+<body>
+
+<div class="rotate" aria-hidden="true">
+  <div class="phone">📱</div>
+  <h2>Turn your device sideways</h2>
+  <p>Tank Duel is played in landscape. Rotate your phone to start the battle.</p>
+</div>
+
+<!-- ---------------------------------------------------------- setup screen -->
+<div class="setup" id="setup">
+  <h1>TANK DUEL</h1>
+  <p class="sub">ONE HIT KNOCKS YOU OUT</p>
+
+  <div class="field">
+    <span class="lbl">PLAYERS</span>
+    <button class="pill" data-n="2" aria-pressed="true">2</button>
+    <button class="pill" data-n="3" aria-pressed="false">3</button>
+    <button class="pill" data-n="4" aria-pressed="false">4</button>
+  </div>
+
+  <div class="players" id="players"></div>
+
+  <button id="start">START BATTLE</button>
+</div>
+
+<div class="wrap">
+  <header class="hud">
+    <div class="scores" id="scores"></div>
+    <div class="wind" id="wind">
+      <div class="lbl">WIND</div>
+      <div class="gauge"><span class="arrows" id="windArrows"></span><span class="val" id="windVal">0</span></div>
+    </div>
+  </header>
+
+  <div class="stage">
+    <canvas id="game"></canvas>
+    <div class="banner" id="banner" hidden>
+      <h2 id="bannerTitle">—</h2>
+      <p id="bannerText"></p>
+      <div class="row">
+        <button id="bannerBtn">Next round</button>
+        <button class="ghost" id="bannerNew">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="turnbar">
+      <span class="chip" id="turnChip"></span><span id="turnText">—</span>
+      <span class="hint" id="hint">1 HIT = OUT</span>
+      <span class="spacer"></span>
+      <span class="keys"><kbd>←</kbd><kbd>→</kbd> angle <kbd>↑</kbd><kbd>↓</kbd> power <kbd>space</kbd> fire</span>
+      <button class="ghost tiny" id="sound" aria-pressed="false" title="Toggle sound">Sound</button>
+      <button class="ghost tiny" id="full" title="Fullscreen">Full</button>
+      <button class="ghost tiny" id="newGame">New</button>
+    </div>
+
+    <div class="dials">
+      <div class="dial">
+        <label for="angle">ANGLE <span class="read"><span id="angleRead">45</span>°</span></label>
+        <input type="range" id="angle" min="0" max="180" step="1" value="45" aria-label="Angle in degrees">
+      </div>
+      <div class="dial">
+        <label for="power">POWER <span class="read" id="powerRead">60</span></label>
+        <input type="range" id="power" min="10" max="100" step="1" value="60" aria-label="Power">
+      </div>
+      <button class="fire" id="fire">FIRE!</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ------------------------------------------------------------------ constants
+const W = 1200, H = 700;            // logical drawing size; canvas letterboxes into the stage
+const GRAV = 320;                   // px/s²
+const WIND_ACC = 5.2;               // px/s² per unit of wind
+const MAX_WIND = 10;
+const MUZZLE_V = 6.4;               // power 100 -> 640 px/s
+const BLAST_R = 48;                 // crater + kill radius
+const TANK_R = 20;                  // tank hit radius
+const BEDROCK = H - 2;              // ground can never be dug below this
+
+const PALETTE = [
+  { name: 'RED',    colour: '#ef4a3f', dark: '#a32a22' },
+  { name: 'BLUE',   colour: '#3b86f0', dark: '#1c4f9e' },
+  { name: 'GREEN',  colour: '#41c25c', dark: '#237a37' },
+  { name: 'YELLOW', colour: '#f2c231', dark: '#a5801a' },
+];
+
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+
+// Camera: the 1200x700 world is scaled to fit the canvas, and whatever screen
+// is left over on the sides shows more of the same battlefield (sky above,
+// ground below) rather than empty letterbox bars.
+const view = {
+  s: 1, offX: 0, offY: 0,       // world -> css transform
+  x0: 0, x1: W, y0: 0, y1: H,   // visible rect, in world coordinates
+  inset: 0,                     // world units hidden behind the floating controls
+};
+
+// ------------------------------------------------------------------ utilities
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const ix = x => clamp(Math.round(x), 0, W - 1);
+const el = id => document.getElementById(id);
+
+// ------------------------------------------------------------------ sound
+// Everything is synthesised — no audio files to ship.
+let actx = null, muted = false, noise = null;
+function ac() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function noiseBuffer(a) {
+  if (!noise) {
+    noise = a.createBuffer(1, a.sampleRate, a.sampleRate);
+    const d = noise.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noise;
+}
+function burst({ dur = .5, freq = 400, gain = .5 }) {
+  if (muted) return;
+  const a = ac(), src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = noiseBuffer(a); src.loop = true;
+  f.type = 'lowpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(gain, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + dur);
+  src.connect(f); f.connect(g); g.connect(a.destination);
+  src.start(); src.stop(a.currentTime + dur);
+}
+function tone({ f0 = 200, f1 = 60, dur = .3, gain = .3, type = 'sine' }) {
+  if (muted) return;
+  const a = ac(), o = a.createOscillator(), g = a.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, a.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), a.currentTime + dur);
+  g.gain.setValueAtTime(gain, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(); o.stop(a.currentTime + dur);
+}
+const sfxFire = () => { burst({ dur: .2, freq: 850, gain: .4 }); tone({ f0: 300, f1: 60, dur: .25, gain: .35 }); };
+const sfxBoom = () => { burst({ dur: .8, freq: 240, gain: .75 }); tone({ f0: 120, f1: 30, dur: .65, gain: .5 }); };
+const sfxThud = () => tone({ f0: 90, f1: 40, dur: .16, gain: .25 });
+const sfxWin  = () => [523, 659, 784, 1047].forEach((f, i) =>
+  setTimeout(() => tone({ f0: f, f1: f, dur: .26, gain: .22, type: 'triangle' }), i * 110));
+
+// The Scorched Earth shell whistle: a square-wave siren whose pitch tracks the
+// shell's altitude, so it rises on the way up and falls on the way down.
+let whistle = null;
+function whistleStart() {
+  if (muted || whistle) return;
+  const a = ac(), o = a.createOscillator(), lp = a.createBiquadFilter(), g = a.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(190, a.currentTime);
+  lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = .7;
+  g.gain.setValueAtTime(0, a.currentTime);
+  g.gain.linearRampToValueAtTime(.075, a.currentTime + .07);
+  o.connect(lp); lp.connect(g); g.connect(a.destination);
+  o.start();
+  whistle = { o, g, a };
+}
+function whistleTrack(y) {
+  if (!whistle) return;
+  const alt = clamp((H - y) / (H * 0.92), 0, 1);          // 0 at ground, 1 at the top of the sky
+  whistle.o.frequency.setTargetAtTime(190 + alt * 760, whistle.a.currentTime, .035);
+}
+function whistleStop() {
+  if (!whistle) return;
+  const { o, g, a } = whistle;
+  whistle = null;
+  g.gain.cancelScheduledValues(a.currentTime);
+  g.gain.setValueAtTime(g.gain.value, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + .07);
+  o.stop(a.currentTime + .09);
+}
+
+// ------------------------------------------------------------------ game state
+const G = {
+  terrain: new Float32Array(W),
+  burn: new Uint8Array(W),          // columns scorched by a blast (drawn without grass)
+  tanks: [],
+  cur: 0,                           // whose turn
+  starter: 0,                       // who opened this round
+  wind: 0,
+  round: 1,
+  state: 'setup',                   // setup | aim | fly | boom | settle | over
+  shell: null,
+  trail: [],
+  parts: [],
+  shake: 0,
+  timer: 0,
+  killed: false,                    // did the last blast knock anyone out?
+  clouds: [],
+  drag: null,                       // live touch/mouse aim point, in logical coords
+};
+
+const aliveTanks = () => G.tanks.filter(t => !t.dead);
+function nextAlive(from) {
+  for (let k = 1; k <= G.tanks.length; k++) {
+    const i = (from + k) % G.tanks.length;
+    if (!G.tanks[i].dead) return i;
+  }
+  return from;
+}
+
+// ------------------------------------------------------------------ terrain
+function generateTerrain() {
+  const t = G.terrain;
+  // The surface lives in a band that stops short of the floating control bar.
+  // Hills are scaled to whatever band we get, rather than clipped flat by it.
+  const top = H * 0.20;
+  const floor = H - 46 - clamp(view.inset, 0, H * 0.34);
+  const band = Math.max(80, floor - top);
+  const k = band / (H - 46 - top);              // 1 on a full-height screen
+
+  const layers = [
+    { amp: rand(60, 105) * k, len: rand(760, 1150) },
+    { amp: rand(28, 58) * k,  len: rand(300, 520) },
+    { amp: rand(11, 24) * k,  len: rand(120, 210) },
+    { amp: rand(4, 9) * k,    len: rand(46, 84) },
+  ];
+  const phase = layers.map(() => Math.random() * Math.PI * 2);
+  const base = top + band * 0.57;
+  for (let x = 0; x < W; x++) {
+    let y = base;
+    for (let i = 0; i < layers.length; i++) {
+      y -= layers[i].amp * Math.sin((x / layers[i].len) * Math.PI * 2 + phase[i]);
+    }
+    t[x] = clamp(y, top, floor);
+  }
+  G.burn.fill(0);
+}
+
+// Level a landing pad so a tank sits flat instead of clipping into a slope.
+function flatten(cx, half) {
+  const t = G.terrain;
+  let sum = 0;
+  for (let i = -half; i <= half; i++) sum += t[ix(cx + i)];
+  const avg = sum / (half * 2 + 1);
+  for (let i = -half; i <= half; i++) {
+    const j = ix(cx + i);
+    const w = 1 - Math.abs(i) / (half + 1);          // blend to avoid a hard step
+    t[j] = t[j] * (1 - w) + avg * w;
+  }
+}
+
+function carveCrater(cx, cy, r) {
+  const t = G.terrain;
+  for (let i = -r; i <= r; i++) {
+    const x = Math.round(cx + i);
+    if (x < 0 || x >= W) continue;
+    const dy = Math.sqrt(Math.max(0, r * r - i * i));
+    const bottom = cy + dy;
+    if (bottom > t[x]) t[x] = Math.min(bottom, BEDROCK);
+    G.burn[x] = 1;
+  }
+}
+
+// Terrain tilt under a tank, so the hull follows the ground.
+function slopeAt(x) {
+  const d = (G.terrain[ix(x + 14)] - G.terrain[ix(x - 14)]) / 28;
+  return clamp(Math.atan(d), -0.55, 0.55);
+}
+// Barrel pivot sits on the turret, which rides the tilted hull.
+function pivotOf(tk) {
+  const r = tk.resting ? slopeAt(tk.x) : 0;
+  return { x: tk.x + 18 * Math.sin(r), y: tk.y - 18 * Math.cos(r), rot: r };
+}
+const aimDir = tk => ({ x: Math.cos(tk.angle * Math.PI / 180), y: -Math.sin(tk.angle * Math.PI / 180) });
+
+// ------------------------------------------------------------------ rounds
+function newRound(advanceStarter) {
+  generateTerrain();
+
+  // One slot per player, left to right, with a little jitter inside each slot.
+  const n = G.tanks.length, slot = W / n;
+  G.tanks.forEach((tk, i) => {
+    tk.x = Math.round(clamp(slot * (i + .5) + rand(-slot * .26, slot * .26), 80, W - 80));
+    flatten(tk.x, 26);
+    tk.y = G.terrain[ix(tk.x)];
+    tk.vy = 0; tk.dead = false; tk.resting = true;
+    // Aim inwards to start: left half points right, right half points left.
+    tk.angle = tk.x < W / 2 ? 45 : 135;
+  });
+
+  G.wind = Math.round(rand(-MAX_WIND, MAX_WIND));
+  if (advanceStarter) G.starter = (G.starter + 1) % n;
+  G.cur = G.starter;
+  G.state = 'aim';
+  G.shell = null; G.trail = []; G.parts = []; G.shake = 0; G.killed = false; G.drag = null;
+  whistleStop();
+  G.clouds = Array.from({ length: 5 }, () => ({
+    x: rand(0, W), y: rand(50, 190), s: rand(.55, 1.15), sp: rand(4, 10),
+  }));
+  hideBanner();
+  syncUI();
+}
+
+function startGame(names) {
+  G.tanks = names.map((name, i) => ({
+    x: 0, y: 0, vy: 0, angle: 45, power: 60,
+    name: name || PALETTE[i].name, colour: PALETTE[i].colour, dark: PALETTE[i].dark,
+    score: 0, dead: false, resting: true,
+  }));
+  G.round = 1; G.starter = 0;
+  buildScoreboard();
+  newRound(false);
+}
+
+// ------------------------------------------------------------------ firing
+function fire() {
+  if (G.state !== 'aim') return;
+  const tk = G.tanks[G.cur];
+  const p = pivotOf(tk), d = aimDir(tk);
+  const speed = tk.power * MUZZLE_V;
+  G.shell = { x: p.x + d.x * 34, y: p.y + d.y * 34, vx: d.x * speed, vy: d.y * speed };
+  G.trail = [{ x: G.shell.x, y: G.shell.y }];
+  G.drag = null;
+  G.state = 'fly';
+  G.timer = 0;
+  sfxFire();
+  whistleStart();
+  syncUI();
+}
+
+// One physics step. Returns true when the shell has finished its flight.
+function stepShell(h) {
+  const s = G.shell;
+  s.vx += G.wind * WIND_ACC * h;
+  s.vy += GRAV * h;
+  s.x += s.vx * h;
+  s.y += s.vy * h;
+
+  // Direct hit on any tank still in the game.
+  for (const tk of G.tanks) {
+    if (!tk.dead && Math.hypot(s.x - tk.x, s.y - (tk.y - 14)) < TANK_R) { impact(s.x, s.y); return true; }
+  }
+  // Ground.
+  if (s.x >= 0 && s.x < W && s.y >= G.terrain[ix(s.x)]) { impact(s.x, G.terrain[ix(s.x)]); return true; }
+  // Gone for good — off the bottom, or so far out it can't blow back.
+  if (s.y > H + 300 || s.x < -1400 || s.x > W + 1400) {
+    G.shell = null; whistleStop(); endTurn(); return true;
+  }
+  return false;
+}
+
+function impact(x, y) {
+  G.shell = null;
+  whistleStop();
+
+  // Resolve the blast against tank positions before the ground changes shape.
+  G.killed = false;
+  for (const tk of G.tanks) {
+    if (tk.dead) continue;
+    if (Math.hypot(x - tk.x, y - (tk.y - 14)) < BLAST_R + TANK_R * 0.6) { tk.dead = true; G.killed = true; }
+  }
+
+  carveCrater(x, y, BLAST_R);
+  spawnExplosion(x, y);
+  for (const tk of G.tanks) if (tk.y < G.terrain[ix(tk.x)] - 0.5) tk.resting = false;
+
+  G.shake = 16;
+  G.state = 'boom';
+  G.timer = 0;
+  sfxBoom();
+  syncUI();
+}
+
+function spawnExplosion(x, y) {
+  for (let i = 0; i < 46; i++) {
+    const a = rand(0, Math.PI * 2), sp = rand(40, 320);
+    G.parts.push({
+      x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+      life: rand(.35, .95), max: 1, r: rand(2, 7),
+      c: ['#fff3b0', '#ffb03a', '#ff6a2a', '#8a5a34'][(Math.random() * 4) | 0],
+    });
+  }
+  G.parts.push({ flash: true, x, y, life: .26, max: .26, r: BLAST_R * 1.7 });
+}
+
+const scoreLine = () => G.tanks.map(t => `${t.name} ${t.score}`).join(' · ');
+
+function endTurn() {
+  const alive = aliveTanks();
+  if (alive.length <= 1) {
+    G.state = 'over';
+    if (alive.length === 1) {
+      alive[0].score++;
+      sfxWin();
+      showBanner(`${alive[0].name} WINS!`, `Round ${G.round} — ${scoreLine()}`, alive[0].colour);
+    } else {
+      showBanner('DRAW!', `Round ${G.round} — ${scoreLine()}`, '#ffd54a');
+    }
+  } else {
+    G.cur = nextAlive(G.cur);
+    G.wind = Math.round(rand(-MAX_WIND, MAX_WIND));
+    G.state = 'aim';
+  }
+  syncUI();
+}
+
+// ------------------------------------------------------------------ main loop
+let last = performance.now(), acc = 0;
+const STEP = 1 / 300;
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, .05);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+function update(dt) {
+  for (const c of G.clouds) {
+    c.x += (c.sp + G.wind * 1.6) * dt;
+    if (c.x > view.x1 + 160) c.x = view.x0 - 160;
+    else if (c.x < view.x0 - 160) c.x = view.x1 + 160;
+  }
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 42);
+
+  for (let i = G.parts.length - 1; i >= 0; i--) {
+    const p = G.parts[i];
+    p.life -= dt;
+    if (!p.flash) { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    if (p.life <= 0) G.parts.splice(i, 1);
+  }
+
+  if (G.state === 'fly' && G.shell) {
+    acc += dt;
+    let guard = 0;
+    while (acc >= STEP && G.state === 'fly' && guard++ < 400) {
+      acc -= STEP;
+      if (stepShell(STEP)) break;
+      const t = G.trail[G.trail.length - 1];
+      if (!t || Math.hypot(G.shell.x - t.x, G.shell.y - t.y) > 5) {
+        G.trail.push({ x: G.shell.x, y: G.shell.y });
+        if (G.trail.length > 900) G.trail.shift();
+      }
+    }
+    if (G.shell) whistleTrack(G.shell.y);
+  } else {
+    acc = 0;
+  }
+
+  if (G.state === 'boom') {
+    G.timer += dt;
+    if (G.timer > .45) { G.state = 'settle'; G.timer = 0; }
+  }
+
+  if (G.state === 'settle') {
+    let moving = false;
+    for (const tk of G.tanks) {
+      const ground = G.terrain[ix(tk.x)];
+      if (tk.y < ground - 0.5) {
+        tk.resting = false;
+        tk.vy += GRAV * 2.2 * dt;
+        tk.y = Math.min(tk.y + tk.vy * dt, ground);
+        moving = true;
+      } else if (!tk.resting) {
+        tk.y = ground;
+        if (tk.vy > 120) sfxThud();
+        tk.vy = 0; tk.resting = true;
+      }
+    }
+    G.timer += dt;
+    if (!moving && G.timer > .25) endTurn();
+  }
+}
+
+// ------------------------------------------------------------------ drawing
+function draw() {
+  ctx.save();
+  if (G.shake > 0) ctx.translate(rand(-G.shake, G.shake) * .35, rand(-G.shake, G.shake) * .35);
+
+  drawSky();
+  drawTerrain();
+  for (const tk of G.tanks) drawTank(tk);
+  if (G.state === 'aim') drawAim(G.tanks[G.cur]);
+  drawTrail();
+  if (G.shell) drawShell();
+  drawParticles();
+
+  ctx.restore();
+}
+
+function drawSky() {
+  const top = Math.min(0, view.y0);
+  const g = ctx.createLinearGradient(0, top, 0, H);
+  g.addColorStop(0, '#4fa8dd'); g.addColorStop(.55, '#93d3f0'); g.addColorStop(1, '#d7f0fb');
+  ctx.fillStyle = g;
+  ctx.fillRect(view.x0 - 40, view.y0 - 40, (view.x1 - view.x0) + 80, (view.y1 - view.y0) + 80);
+
+  ctx.fillStyle = '#ffe066';
+  ctx.beginPath(); ctx.arc(W - 130, 100, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,224,102,.28)';
+  ctx.beginPath(); ctx.arc(W - 130, 100, 72, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  for (const c of G.clouds) {
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(c.s, c.s);
+    ctx.beginPath();
+    ctx.arc(-40, 6, 26, 0, Math.PI * 2);
+    ctx.arc(0, -8, 36, 0, Math.PI * 2);
+    ctx.arc(42, 6, 28, 0, Math.PI * 2);
+    ctx.rect(-40, 6, 82, 22);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawTerrain() {
+  const t = G.terrain;
+  // Run past the world edges so wide screens see the ground continue instead
+  // of stopping mid-air; ix() clamps, which extends the edge columns outwards.
+  const gx0 = Math.floor(view.x0) - 2, gx1 = Math.ceil(view.x1) + 2;
+  const bottom = view.y1 + 4;
+
+  ctx.beginPath();
+  ctx.moveTo(gx0, bottom);
+  for (let x = gx0; x <= gx1; x++) ctx.lineTo(x, t[ix(x)]);
+  ctx.lineTo(gx1, bottom);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, H * .3, 0, H);
+  g.addColorStop(0, '#9c6237'); g.addColorStop(1, '#5d3a21');
+  ctx.fillStyle = g; ctx.fill();
+
+  // Surface skin: grass where untouched, scorched dirt where a shell landed.
+  for (let x = gx0; x <= gx1; x++) {
+    const j = ix(x);
+    if (G.burn[j]) { ctx.fillStyle = '#4b3020'; ctx.fillRect(x, t[j], 1, 7); }
+    else {
+      ctx.fillStyle = '#63c53f'; ctx.fillRect(x, t[j], 1, 11);
+      ctx.fillStyle = '#3f9a27'; ctx.fillRect(x, t[j] + 11, 1, 5);
+    }
+  }
+}
+
+function drawTank(tk) {
+  const rot = tk.resting ? slopeAt(tk.x) : 0;
+  const c = tk.dead ? '#4a4a4a' : tk.colour;
+  const d = tk.dead ? '#2c2c2c' : tk.dark;
+
+  ctx.save();
+  ctx.translate(tk.x, tk.y);
+  ctx.rotate(rot);
+
+  ctx.fillStyle = 'rgba(0,0,0,.22)';
+  ctx.beginPath(); ctx.ellipse(0, 1, 34, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#2c3440';
+  roundRect(-32, -14, 64, 14, 7); ctx.fill();
+  ctx.fillStyle = '#59646f';
+  for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.arc(i * 9, -7, 3.4, 0, Math.PI * 2); ctx.fill(); }
+
+  ctx.fillStyle = c;
+  roundRect(-26, -30, 52, 18, 6); ctx.fill();
+  ctx.fillStyle = d;
+  roundRect(-26, -17, 52, 5, 2.5); ctx.fill();
+
+  ctx.fillStyle = c;
+  ctx.beginPath(); ctx.arc(0, -30, 13, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.28)';
+  ctx.beginPath(); ctx.arc(-4, -33, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // Barrel is drawn in world space so it always shows the true firing angle.
+  const p = pivotOf(tk), dir = aimDir(tk);
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = d; ctx.lineWidth = 11;
+  ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + dir.x * 36, p.y + dir.y * 36); ctx.stroke();
+  ctx.strokeStyle = c; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + dir.x * 34, p.y + dir.y * 34); ctx.stroke();
+  ctx.restore();
+
+  // Name plate, so 3- and 4-player games stay legible. Grows as the world
+  // shrinks, so it stays readable on a small phone screen.
+  const fs = Math.round(17 / clamp(view.s / 0.85, 0.5, 1));
+  ctx.font = `700 ${fs}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.45)';
+  ctx.strokeText(tk.name, tk.x, tk.y - 46 - fs * .4);
+  ctx.fillStyle = tk.dead ? '#9aa6b3' : '#fff';
+  ctx.fillText(tk.name, tk.x, tk.y - 46 - fs * .4);
+
+  if (tk.dead) {
+    ctx.font = `bold ${Math.round(fs * 1.7)}px system-ui, sans-serif`;
+    ctx.fillText('💀', tk.x, tk.y - 46 - fs * 1.9);
+  }
+}
+
+function drawAim(tk) {
+  const p = pivotOf(tk), d = aimDir(tk);
+  const len = 46 + tk.power * 0.85;
+  ctx.save();
+  ctx.setLineDash([9, 11]);
+  ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.75)';
+  ctx.beginPath();
+  ctx.moveTo(p.x + d.x * 42, p.y + d.y * 42);
+  ctx.lineTo(p.x + d.x * len, p.y + d.y * len);
+  ctx.stroke();
+  ctx.restore();
+
+  // Reticle under the finger while dragging to aim.
+  if (G.drag) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(G.drag.x, G.drag.y, 22, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(G.drag.x - 32, G.drag.y); ctx.lineTo(G.drag.x - 12, G.drag.y);
+    ctx.moveTo(G.drag.x + 12, G.drag.y); ctx.lineTo(G.drag.x + 32, G.drag.y);
+    ctx.moveTo(G.drag.x, G.drag.y - 32); ctx.lineTo(G.drag.x, G.drag.y - 12);
+    ctx.moveTo(G.drag.x, G.drag.y + 12); ctx.lineTo(G.drag.x, G.drag.y + 32);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawTrail() {
+  if (G.trail.length < 2) return;
+  ctx.save();
+  ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.55)';
+  ctx.beginPath();
+  ctx.moveTo(G.trail[0].x, G.trail[0].y);
+  for (let i = 1; i < G.trail.length; i++) ctx.lineTo(G.trail[i].x, G.trail[i].y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawShell() {
+  const s = G.shell;
+  ctx.fillStyle = '#22303d';
+  ctx.beginPath(); ctx.arc(s.x, s.y, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd54a';
+  ctx.beginPath(); ctx.arc(s.x - 2, s.y - 2, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawParticles() {
+  for (const p of G.parts) {
+    const a = clamp(p.life / p.max, 0, 1);
+    if (p.flash) {
+      ctx.fillStyle = `rgba(255,238,170,${a * .85})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1.15 - a * .35), 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// ------------------------------------------------------------------ touch / mouse aiming
+// Undo the camera transform to get world coordinates from a pointer event.
+function toLogical(clientX, clientY) {
+  const r = cv.getBoundingClientRect();
+  return {
+    x: (clientX - r.left - view.offX) / view.s,
+    y: (clientY - r.top - view.offY) / view.s,
+  };
+}
+
+// Drag anywhere on the field: direction sets the angle, distance sets the power.
+function aimAt(px, py) {
+  const tk = G.tanks[G.cur];
+  const p = pivotOf(tk);
+  const dx = px - p.x, dy = py - p.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 12) return;
+  tk.angle = Math.round(clamp(Math.atan2(-dy, dx) * 180 / Math.PI, 0, 180));
+  tk.power = Math.round(clamp(10 + (dist - 60) * 90 / 340, 10, 100));
+  G.drag = { x: px, y: py };
+  syncUI();
+}
+
+cv.addEventListener('pointerdown', e => {
+  if (G.state !== 'aim') return;
+  cv.setPointerCapture(e.pointerId);
+  const p = toLogical(e.clientX, e.clientY);
+  aimAt(p.x, p.y);
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', e => {
+  if (G.state !== 'aim' || !cv.hasPointerCapture(e.pointerId)) return;
+  const p = toLogical(e.clientX, e.clientY);
+  aimAt(p.x, p.y);
+  e.preventDefault();
+});
+const endDrag = e => {
+  if (cv.hasPointerCapture?.(e.pointerId)) cv.releasePointerCapture(e.pointerId);
+  G.drag = null;
+};
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+
+// ------------------------------------------------------------------ UI wiring
+const angleEl = el('angle'), powerEl = el('power'), fireBtn = el('fire');
+const banner = el('banner');
+
+function buildScoreboard() {
+  el('scores').innerHTML = G.tanks.map((t, i) => `
+    <div class="score" data-i="${i}">
+      <span class="chip" style="background:${t.colour}"></span>
+      <span class="num" style="color:${t.colour}">0</span>
+      <span class="name"></span>
+    </div>`).join('');
+  G.tanks.forEach((t, i) => {
+    el('scores').children[i].querySelector('.name').textContent = t.name;
+  });
+}
+
+function syncUI() {
+  if (!G.tanks.length) return;
+  const tk = G.tanks[G.cur];
+  const aiming = G.state === 'aim';
+
+  angleEl.value = tk.angle; powerEl.value = tk.power;
+  el('angleRead').textContent = tk.angle;
+  el('powerRead').textContent = tk.power;
+  angleEl.style.setProperty('--accent', tk.colour);
+  powerEl.style.setProperty('--accent', tk.colour);
+  angleEl.disabled = powerEl.disabled = !aiming;
+  fireBtn.disabled = !aiming;
+  fireBtn.style.background = tk.colour;
+  fireBtn.style.boxShadow = `0 5px 0 ${tk.dark}`;
+
+  el('turnChip').style.background = tk.colour;
+  el('turnText').textContent = aiming ? `${tk.name}'s turn` :
+    G.state === 'over' ? 'Round over' : 'Shell away…';
+
+  const nodes = el('scores').children;
+  G.tanks.forEach((t, i) => {
+    const n = nodes[i];
+    if (!n) return;
+    n.querySelector('.num').textContent = t.score;
+    n.classList.toggle('active', aiming && i === G.cur);
+    n.classList.toggle('dead', t.dead);
+  });
+
+  const mag = Math.abs(G.wind);
+  el('windArrows').textContent = mag === 0 ? '·' : (G.wind < 0 ? '◀' : '▶').repeat(Math.min(5, Math.ceil(mag / 2)));
+  el('windVal').textContent = mag;
+  el('wind').classList.toggle('calm', mag === 0);
+}
+
+function showBanner(title, text, colour) {
+  el('bannerTitle').textContent = title;
+  el('bannerTitle').style.color = colour || '#fff';
+  el('bannerText').textContent = text;
+  banner.hidden = false;
+}
+const hideBanner = () => { banner.hidden = true; };
+
+angleEl.addEventListener('input', () => {
+  G.tanks[G.cur].angle = +angleEl.value;
+  el('angleRead').textContent = angleEl.value;
+});
+powerEl.addEventListener('input', () => {
+  G.tanks[G.cur].power = +powerEl.value;
+  el('powerRead').textContent = powerEl.value;
+});
+fireBtn.addEventListener('click', fire);
+
+el('bannerBtn').addEventListener('click', () => { G.round++; newRound(true); });
+el('bannerNew').addEventListener('click', showSetup);
+el('newGame').addEventListener('click', showSetup);
+el('sound').addEventListener('click', e => {
+  muted = !muted;
+  if (muted) whistleStop();
+  e.currentTarget.textContent = muted ? 'Muted' : 'Sound';
+  e.currentTarget.setAttribute('aria-pressed', String(muted));
+  if (!muted) sfxThud();
+});
+
+// Fullscreen is the only way to actually pin orientation on Android Chrome.
+el('full').addEventListener('click', async () => {
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+      await screen.orientation?.lock?.('landscape');
+    } else {
+      screen.orientation?.unlock?.();
+      await document.exitFullscreen();
+    }
+  } catch { /* orientation lock is unsupported on iOS — the rotate prompt covers it */ }
+});
+
+addEventListener('keydown', e => {
+  if (G.state === 'setup') return;
+  if (e.target.tagName === 'BUTTON' && e.key === ' ') return;   // let buttons handle their own space
+  if (G.state !== 'aim') {
+    if (e.key === 'Enter' && G.state === 'over') { G.round++; newRound(true); e.preventDefault(); }
+    return;
+  }
+  const tk = G.tanks[G.cur];
+  const step = e.shiftKey ? 5 : 1;
+  switch (e.key) {
+    case 'ArrowLeft':  tk.angle = clamp(tk.angle + step, 0, 180); break;
+    case 'ArrowRight': tk.angle = clamp(tk.angle - step, 0, 180); break;
+    case 'ArrowUp':    tk.power = clamp(tk.power + step, 10, 100); break;
+    case 'ArrowDown':  tk.power = clamp(tk.power - step, 10, 100); break;
+    case ' ': case 'Enter': fire(); e.preventDefault(); return;
+    default: return;
+  }
+  e.preventDefault();
+  syncUI();
+});
+
+// ------------------------------------------------------------------ setup screen
+const setupEl = el('setup');
+let playerCount = 2;
+const names = PALETTE.map(p => p.name);      // remembered as the count changes
+
+function renderPlayers() {
+  el('players').innerHTML = PALETTE.slice(0, playerCount).map((p, i) => `
+    <label class="pcard" style="--c:${p.colour}">
+      <span class="chip"></span>
+      <input type="text" maxlength="10" data-i="${i}" value="${names[i]}"
+             autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Player ${i + 1} name">
+    </label>`).join('');
+  el('players').querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => { names[+inp.dataset.i] = inp.value; });
+    inp.addEventListener('focus', () => inp.select());
+  });
+}
+
+el('setup').querySelectorAll('.pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    playerCount = +btn.dataset.n;
+    el('setup').querySelectorAll('.pill').forEach(b =>
+      b.setAttribute('aria-pressed', String(+b.dataset.n === playerCount)));
+    renderPlayers();
+  });
+});
+
+function showSetup() {
+  G.state = 'setup';
+  whistleStop();
+  hideBanner();
+  setupEl.hidden = false;
+}
+
+el('start').addEventListener('click', () => {
+  const chosen = PALETTE.slice(0, playerCount)
+    .map((p, i) => (names[i] || '').trim().slice(0, 10) || p.name);
+  setupEl.hidden = true;
+  ac();                                       // unlock audio on this user gesture
+  startGame(chosen);
+});
+
+// ------------------------------------------------------------------ boot
+function fitCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect();
+  const cssW = Math.max(1, r.width), cssH = Math.max(1, r.height);
+
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+
+  const s = Math.min(cssW / W, cssH / H);          // contain: the whole world stays visible
+  view.s = s;
+  view.offX = (cssW - W * s) / 2;
+  view.offY = (cssH - H * s) / 2;
+  view.x0 = -view.offX / s;  view.x1 = (cssW - view.offX) / s;
+  view.y0 = -view.offY / s;  view.y1 = (cssH - view.offY) / s;
+
+  // How much world the floating control bar covers, when it is floating.
+  const bar = document.querySelector('.controls');
+  view.inset = matchMedia('(max-height:560px)').matches
+    ? (bar.getBoundingClientRect().height + 10) / s
+    : 0;
+
+  ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * view.offX, dpr * view.offY);
+}
+addEventListener('resize', fitCanvas);
+addEventListener('orientationchange', fitCanvas);
+new ResizeObserver(fitCanvas).observe(cv);        // catches layout changes too
+
+// Handle for the browser console and the Playwright smoke test.
+window.__debug = { G, view, fire, newRound, startGame };
+
+fitCanvas();
+renderPlayers();
+generateTerrain();                            // backdrop behind the setup screen
+startGame([PALETTE[0].name, PALETTE[1].name]);
+showSetup();                                  // ...but start on the setup screen
+if (matchMedia('(pointer:coarse)').matches) el('hint').textContent = 'DRAG TO AIM · 1 HIT = OUT';
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
