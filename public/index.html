@@ -192,6 +192,10 @@
      the colour chips and numbers — the name of whoever is up is already on
      the turn line directly below. */
   @media (max-width:560px){
+    /* Let a row spill onto a second line rather than squeezing, and give the
+       "direct hits only" note a line of its own. */
+    .field{flex-wrap:wrap; justify-content:center; row-gap:4px}
+    .field .note{flex-basis:100%; text-align:center}
     .score .name{display:none}
     /* The round number is on the win banner anyway; the scores need the room. */
     .meta{display:none}

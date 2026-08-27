@@ -210,7 +210,8 @@ only what is inside it changes.
 **Blast radius** (`BLAST_SIZES`, 0–84, default 48). The preview draws the lethal
 radius as a dashed ring around the tank at the same true scale, so the two
 settings can be judged against each other. At zero the ring is replaced by a
-crosshair on the tank itself and the screen says *direct hits only*.
+crosshair on the tank itself and the screen says *direct hits only* — a note
+that drops onto its own line on a narrow screen rather than crowding the row.
 
 Both are rendered with `tankBody()` and `paintBarrel()`, the same routines the
 battlefield uses — there is no second, drifting copy of what a tank looks like.
