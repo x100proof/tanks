@@ -187,4 +187,4 @@ version. On a static host, clear the CDN cache if it has one.
 - **No analytics, no telemetry, no external requests.** The page is genuinely
   self-contained, which is also why it works offline.
 
-The design of the game itself is in [`architecture.md`](architecture.md).
+The design of the game itself is in [`ARCHITECTURE.md`](ARCHITECTURE.md).

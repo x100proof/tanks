@@ -63,6 +63,6 @@ spare Raspberry Pi, or the bundled zero-dependency server.
 
 ## Design
 
-The design lives in [`architecture.md`](architecture.md) and is kept in step
+The design lives in [`ARCHITECTURE.md`](ARCHITECTURE.md) and is kept in step
 with the implementation — see [`CLAUDE.md`](CLAUDE.md).
 
