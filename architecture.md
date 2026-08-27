@@ -111,22 +111,24 @@ grass where `burn` is clear, scorched dirt where it is set.
 | Constant | Value | Meaning |
 |---|---|---|
 | `GRAV` | 320 | downward acceleration, world units/s² |
-| `WIND_ACC` | 5.2 | horizontal acceleration per unit of wind |
-| `MAX_WIND` | 10 | wind is a random integer in `-10..10`, re-rolled every turn |
 | `MUZZLE_V` | √(`GRAV`·`W`·1.15)/100 ≈ 5.08 | muzzle speed per unit of power, derived so full power carries about 1.15 battlefields — the far side is always reachable, never trivially so |
 | `BLAST_R` | 48 | crater radius and kill radius |
 | `TANK_R` | 20 | tank hit radius |
 | `STEP` | 1/300 s | fixed integration step |
 
+**There is no wind.** The game is for young children, and identical dials
+producing an identical shot every single time is what makes it learnable: a
+child can watch a shot fall short, nudge the power up, and see exactly the
+result they expected. Nothing in the flight is random.
+
 The shell integrates on a **fixed timestep accumulator** (`STEP`), independent
-of frame rate, capped at 400 substeps per frame. Each step applies wind to `vx`
-and gravity to `vy`, then advances position and tests, in order:
+of frame rate, capped at 400 substeps per frame. Each step applies gravity to
+`vy`, then advances position and tests, in order:
 
 1. **Direct hit** — within `TANK_R` of any live tank's centre `(x, y-14)`.
 2. **Ground** — `y >= terrain[x]`, across the world and the visible overscan.
-3. **Lost** — `y > H + 300`, or `|x|` more than 1400 beyond the world, at which
-   point the shot is a miss. The generous horizontal margin lets a strong wind
-   blow a shell back into play.
+3. **Lost** — `y > H + 300`, or `|x|` more than 900 beyond the world, at which
+   point the shot is a miss.
 
 The ground test covers the visible overscan as well as the world proper, so
 what looks solid is solid (§2).
@@ -163,7 +165,7 @@ the next player aims.
 **Turn resolution.** `endTurn` counts survivors:
 
 - **more than one** — the turn passes to the next living player (`nextAlive`,
-  which skips eliminated tanks and wraps), and the wind is re-rolled.
+  which skips eliminated tanks and wraps).
 - **exactly one** — that player wins the round and scores a point.
 - **none** — a draw, and nobody scores.
 
@@ -180,7 +182,12 @@ first.
 Three input methods drive the same two values (`angle`, `power`), and all three
 stay in sync through `syncUI`:
 
-- **Sliders** — angle `0..180`, power `10..100`.
+- **Sliders** — angle `0..180`, power `10..100`. The two are deliberately
+  distinguishable at a glance: angle wears a pale tint of the player's colour,
+  power wears the full colour **and fills in from the left up to the ball**, so
+  how full a shot is can be read without reading the number. The fill stops
+  under the middle of the thumb (`--stop` accounts for the thumb width) rather
+  than running past it.
 - **Drag anywhere on the field** (touch or mouse) — the direction from the
   turret to the finger sets the angle, and the distance sets the power
   (`10 + (dist - 60) * 90/340`, clamped). A reticle tracks the finger. Dragging
@@ -218,13 +225,49 @@ the action, `view.inset` measures its height in world units and §3 keeps the
 terrain surface — and therefore every tank — above it. The class is set from JS
 rather than a media query so a single rule decides it.
 
-Scores, the wind gauge, and the turn indicator are sized with `clamp()` so they
-stay readable from phone to desktop. The active player is marked on the
+The top bar carries the scores, the round number, and a **full screen** button
+in the top-right corner. The same button leaves full screen again, and its
+label tracks `fullscreenchange`, so pressing Escape or using a system gesture
+keeps it honest. iOS Safari has no element fullscreen, so there the button
+hides itself rather than offering something that cannot work.
+
+Scores, the round counter, and the turn indicator are sized with `clamp()` so
+they stay readable from phone to desktop. The active player is marked on the
 scoreboard, and the FIRE button and slider thumbs take that player's colour.
 
 ---
 
-## 8. Audio
+## 8. Frame cost
+
+Drawing is the most expensive thing this game does, so two rules keep it cheap.
+
+**The battlefield is cached.** Painting the terrain means one path plus a
+per-column surface skin — with overscan that was ~2,400 `fillRect` and ~1,200
+`lineTo` calls *per frame*, about 150,000 `fillRect` calls a second. It is now
+rendered once into an offscreen canvas (`rebuildTerrain`) and blitted, and only
+re-rendered when the heightfield actually changes: a new round, a crater, or a
+change of scale. `markTerrainDirty()` is called from `generateTerrain`,
+`flatten` and `carveCrater`. The overscan either side is flat by construction,
+so it is a couple of rectangles rather than a loop, overlapped by a unit to hide
+the antialiasing seam. Sky and dirt gradients are likewise built once, not per
+frame.
+
+**Idle frames are throttled.** Most of a turn is spent with a player thinking,
+and repainting a full screen 60 times a second to show nothing new is pure
+waste. The loop keeps updating every frame — the simulation is cheap — but only
+*draws* when something is moving (`fly`, `boom`, `settle`, live particles or
+screen shake), when `requestDraw()` has been called because input changed what
+is on screen, or when `IDLE_FPS` (10) says it is time to drift the clouds along.
+
+Measured in headless Chromium, which software-rasterises and so overstates the
+absolute numbers: idle cost fell from **53% of a core to 13%**, and canvas
+calls from ~150,000/s to a few hundred. A browser with GPU compositing pays
+much less than either figure. `IDLE_FPS` is the knob if it ever needs to go
+lower; the remaining cost is pixel fill, which is proportional to frames drawn.
+
+---
+
+## 9. Audio
 
 Every sound is synthesised with the Web Audio API; there are no audio files. The
 context is created on the **Start battle** click, which satisfies browser
@@ -243,7 +286,7 @@ A **Sound** toggle mutes everything and stops any whistle in flight.
 
 ---
 
-## 9. Server and deployment
+## 10. Server and deployment
 
 `server.js` serves `public/` over HTTP on `127.0.0.1:3005` (override with
 `PORT`/`HOST`). It resolves and normalises the request path and refuses anything
@@ -274,7 +317,7 @@ browser
 
 ---
 
-## 10. Debug handle
+## 11. Debug handle
 
 `window.__debug` exposes `{ G, view, fire, newRound, startGame, worldW, worldH }`. It is what the
 browser-driven tests use to inspect terrain, force deterministic shots and step

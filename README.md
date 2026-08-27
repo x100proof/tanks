@@ -4,10 +4,14 @@ A hot-seat artillery game for 2–4 players on one device, hosted at
 <https://tanks.example.com>.
 
 Pick how many players and name them, then take turns lobbing shells across
-randomly generated hills. Set **angle** and **power**, watch the **wind**, and
-fire. The ground is destructible — shells blow craters, and a tank whose ground
-is dug out from under it falls. **One hit knocks a player out**; the last tank
-standing wins the round, and scores carry across rounds.
+randomly generated hills. Set **angle** and **power** and fire. The ground is
+destructible — shells blow craters, and a tank whose ground is dug out from
+under it falls. **One hit knocks a player out**; the last tank standing wins the
+round, and scores carry across rounds.
+
+There is **no wind**: the same dials always produce the same shot. It is a game
+for young children, and being able to nudge the power up and see exactly the
+result you expected is the whole point.
 
 Everything is drawn as vector graphics on a canvas and every sound is
 synthesised — no images, no fonts, no audio files, no dependencies, no build
@@ -15,7 +19,8 @@ step. The whole game is one file: [`public/index.html`](public/index.html).
 
 ## Controls
 
-- **Sliders** — angle (0–180°) and power (10–100).
+- **Sliders** — angle (0–180°) and power (10–100). Power fills in from the left
+  so you can see how strong the shot is at a glance.
 - **Drag the battlefield** — direction sets the angle, distance sets the power.
   Dragging never fires; press **FIRE!** to shoot.
 - **Keyboard** — `←`/`→` angle, `↑`/`↓` power (hold `shift` for bigger steps),
@@ -23,7 +28,8 @@ step. The whole game is one file: [`public/index.html`](public/index.html).
 
 The battlefield is **square**, so the game plays the same held upright or
 sideways, on a phone or a desktop — it never asks you to rotate anything. The
-**Full** button gives you fullscreen if you want it.
+**Full** button in the top-right corner goes full screen, and turns into
+**Exit** to come back (Escape works too).
 
 ## Run locally
 

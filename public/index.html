@@ -31,7 +31,7 @@
     padding:8px calc(8px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
   }
 
-  /* ---------- top bar: scores + wind ---------- */
+  /* ---------- top bar: scores + round ---------- */
   .hud{
     flex:none; display:flex; align-items:center; gap:10px;
     background:var(--panel); border-radius:14px; padding:8px 14px;
@@ -45,12 +45,10 @@
   .score.dead{opacity:.4}
   .score.dead .name{text-decoration:line-through}
 
-  .wind{text-align:center; padding-left:6px; flex:none}
-  .wind .lbl{font-size:10px; letter-spacing:.22em; color:var(--muted)}
-  .wind .gauge{display:flex; align-items:center; justify-content:center; gap:6px; font-size:clamp(16px,3vw,24px); line-height:1.15}
-  .wind .arrows{color:#6fd3ff; letter-spacing:-2px}
-  .wind .val{font-variant-numeric:tabular-nums; min-width:2ch}
-  .wind.calm .val{color:var(--muted)}
+  .hud #full{flex:none; margin-left:10px}
+  .meta{text-align:center; padding-left:6px; flex:none}
+  .meta .lbl{font-size:10px; letter-spacing:.22em; color:var(--muted)}
+  .meta .val{font-size:clamp(16px,3vw,24px); line-height:1.15; font-variant-numeric:tabular-nums}
 
   /* ---------- stage (flexes to fill; canvas letterboxes into it) ---------- */
   .stage{
@@ -85,14 +83,27 @@
   .dial label{display:flex; justify-content:space-between; align-items:baseline; font-size:11px; letter-spacing:.18em; color:var(--muted); margin-bottom:2px}
   .dial .read{font-size:clamp(17px,3vw,26px); color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:0}
 
-  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:38px; background:transparent; cursor:pointer; margin:0; touch-action:none}
-  input[type=range]::-webkit-slider-runnable-track{height:14px; border-radius:99px; background:var(--panel-2); box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}
-  input[type=range]::-moz-range-track{height:14px; border-radius:99px; background:var(--panel-2); box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}
+  /* --p is how far along the thumb sits (0..1); --tw is the thumb width, so the
+     fill stops under the middle of the ball instead of running past it. */
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:38px; background:transparent;
+    cursor:pointer; margin:0; touch-action:none;
+    --p:0; --tw:36px; --accent:#fff; --fill:transparent;
+    --stop:calc(var(--p) * (100% - var(--tw)) + var(--tw) / 2);
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:14px; border-radius:99px; box-shadow:inset 0 2px 4px rgba(0,0,0,.5);
+    background:linear-gradient(to right, var(--fill) 0 var(--stop), var(--panel-2) var(--stop) 100%);
+  }
+  input[type=range]::-moz-range-track{
+    height:14px; border-radius:99px; box-shadow:inset 0 2px 4px rgba(0,0,0,.5);
+    background:linear-gradient(to right, var(--fill) 0 var(--stop), var(--panel-2) var(--stop) 100%);
+  }
   input[type=range]::-webkit-slider-thumb{
     -webkit-appearance:none; width:36px; height:36px; margin-top:-11px; border-radius:50%;
-    background:var(--accent,#fff); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5);
+    background:var(--accent); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5);
   }
-  input[type=range]::-moz-range-thumb{width:28px; height:28px; border-radius:50%; background:var(--accent,#fff); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-thumb{width:28px; height:28px; border-radius:50%; background:var(--accent); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5)}
   input[type=range]:focus-visible{outline:3px solid #fff; outline-offset:4px; border-radius:99px}
   input[type=range]:disabled{opacity:.45; cursor:default}
 
@@ -152,7 +163,7 @@
   html.short .score .num{font-size:24px}
   html.short .dials{gap:9px}
   html.short .dial label{margin-bottom:0}
-  html.short input[type=range]{height:30px}
+  html.short input[type=range]{height:30px; --tw:30px}
   html.short input[type=range]::-webkit-slider-thumb{width:30px; height:30px; margin-top:-8px}
   html.short .fire{height:44px; min-width:120px; padding:0 16px}
   html.short .banner{gap:9px}
@@ -161,7 +172,6 @@
   html.short .pcard{padding:5px 8px}
 
   @media (pointer:coarse){ .keys{display:none} }
-  @media (pointer:fine){ #full{display:none} }
 
   /* ---------- narrow viewports (phone held upright) ----------
      Portrait has height to spare and none to waste sideways, so the FIRE
@@ -204,10 +214,11 @@
 <div class="wrap">
   <header class="hud">
     <div class="scores" id="scores"></div>
-    <div class="wind" id="wind">
-      <div class="lbl">WIND</div>
-      <div class="gauge"><span class="arrows" id="windArrows"></span><span class="val" id="windVal">0</span></div>
+    <div class="meta">
+      <div class="lbl">ROUND</div>
+      <div class="val" id="roundVal">1</div>
     </div>
+    <button class="ghost tiny" id="full" title="Full screen">Full</button>
   </header>
 
   <div class="stage">
@@ -229,7 +240,6 @@
       <span class="spacer"></span>
       <span class="keys"><kbd>←</kbd><kbd>→</kbd> angle <kbd>↑</kbd><kbd>↓</kbd> power <kbd>space</kbd> fire</span>
       <button class="ghost tiny" id="sound" aria-pressed="false" title="Toggle sound">Sound</button>
-      <button class="ghost tiny" id="full" title="Fullscreen">Full</button>
       <button class="ghost tiny" id="newGame">New</button>
     </div>
 
@@ -260,9 +270,9 @@
 const SIZE = 700;
 const W = SIZE, H = SIZE;
 
+// No wind: this is a game for young children, and a shell that always does
+// the same thing for the same dials is what makes it learnable.
 const GRAV = 320;                   // world units/s²
-const WIND_ACC = 5.2;               // world units/s² per unit of wind
-const MAX_WIND = 10;
 // Full power carries about 1.15 battlefields, so the far side is always
 // reachable but never trivially so.
 const MUZZLE_V = Math.sqrt(GRAV * W * 1.15) / 100;
@@ -291,6 +301,12 @@ const view = {
 
 // ------------------------------------------------------------------ utilities
 const rand = (a, b) => a + Math.random() * (b - a);
+// Blend a hex colour towards white, for the paler of the two dial shades.
+function tint(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = c => Math.round(c + (255 - c) * amt);
+  return `rgb(${mix(n >> 16 & 255)},${mix(n >> 8 & 255)},${mix(n & 255)})`;
+}
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const ix = x => clamp(Math.round(x), 0, W - 1);
 const el = id => document.getElementById(id);
@@ -375,7 +391,6 @@ const G = {
   tanks: [],
   cur: 0,                           // whose turn
   starter: 0,                       // who opened this round
-  wind: 0,
   round: 1,
   state: 'setup',                   // setup | aim | fly | boom | settle | over
   shell: null,
@@ -423,6 +438,7 @@ function generateTerrain() {
     t[x] = clamp(y, top, floor);
   }
   G.burn.fill(0);
+  markTerrainDirty();
 }
 
 // Level a landing pad so a tank sits flat instead of clipping into a slope.
@@ -436,6 +452,7 @@ function flatten(cx, half) {
     const w = 1 - Math.abs(i) / (half + 1);          // blend to avoid a hard step
     t[j] = t[j] * (1 - w) + avg * w;
   }
+  markTerrainDirty();
 }
 
 function carveCrater(cx, cy, r) {
@@ -448,6 +465,7 @@ function carveCrater(cx, cy, r) {
     if (bottom > t[x]) t[x] = Math.min(bottom, BEDROCK);
     G.burn[x] = 1;
   }
+  markTerrainDirty();
 }
 
 // Terrain tilt under a tank, so the hull follows the ground.
@@ -477,14 +495,13 @@ function newRound(advanceStarter) {
     tk.angle = tk.x < W / 2 ? 45 : 135;
   });
 
-  G.wind = Math.round(rand(-MAX_WIND, MAX_WIND));
   if (advanceStarter) G.starter = (G.starter + 1) % n;
   G.cur = G.starter;
   G.state = 'aim';
   G.shell = null; G.trail = []; G.parts = []; G.shake = 0; G.killed = false; G.drag = null;
   whistleStop();
   G.clouds = Array.from({ length: 5 }, () => ({
-    x: rand(0, W), y: rand(50, 190), s: rand(.55, 1.15), sp: rand(4, 10),
+    x: rand(0, W), y: rand(40, 200), s: rand(.55, 1.15), sp: rand(3, 8),
   }));
   hideBanner();
   syncUI();
@@ -520,7 +537,6 @@ function fire() {
 // One physics step. Returns true when the shell has finished its flight.
 function stepShell(h) {
   const s = G.shell;
-  s.vx += G.wind * WIND_ACC * h;
   s.vy += GRAV * h;
   s.x += s.vx * h;
   s.y += s.vy * h;
@@ -537,8 +553,8 @@ function stepShell(h) {
     impact(s.x, G.terrain[ix(s.x)]);
     return true;
   }
-  // Gone for good — off the bottom, or so far out it can't blow back.
-  if (s.y > H + 300 || s.x < -1400 || s.x > W + 1400) {
+  // Gone for good — off the bottom or well outside the field.
+  if (s.y > H + 300 || s.x < -900 || s.x > W + 900) {
     G.shell = null; whistleStop(); endTurn(); return true;
   }
   return false;
@@ -593,7 +609,6 @@ function endTurn() {
     }
   } else {
     G.cur = nextAlive(G.cur);
-    G.wind = Math.round(rand(-MAX_WIND, MAX_WIND));
     G.state = 'aim';
   }
   syncUI();
@@ -603,17 +618,33 @@ function endTurn() {
 let last = performance.now(), acc = 0;
 const STEP = 1 / 300;
 
+// Most of a turn is spent with the player thinking, and repainting a full
+// screen 60 times a second to show nothing new is the single most expensive
+// thing this game can do. So: paint every frame while something is actually
+// moving, and otherwise tick over slowly just to drift the clouds. Any input
+// that changes what is on screen asks for an immediate frame.
+const IDLE_FPS = 10;
+let needsDraw = true, lastDraw = 0;
+const requestDraw = () => { needsDraw = true; };
+
 function frame(now) {
   const dt = Math.min((now - last) / 1000, .05);
   last = now;
   update(dt);
-  draw();
+
+  const animating = G.state === 'fly' || G.state === 'boom' || G.state === 'settle'
+    || G.parts.length > 0 || G.shake > 0;
+  if (animating || needsDraw || now - lastDraw >= 1000 / IDLE_FPS) {
+    draw();
+    lastDraw = now;
+    needsDraw = false;
+  }
   requestAnimationFrame(frame);
 }
 
 function update(dt) {
   for (const c of G.clouds) {
-    c.x += (c.sp + G.wind * 1.6) * dt;
+    c.x += c.sp * dt;
     if (c.x > view.x1 + 160) c.x = view.x0 - 160;
     else if (c.x < view.x0 - 160) c.x = view.x1 + 160;
   }
@@ -684,11 +715,27 @@ function draw() {
   ctx.restore();
 }
 
-function drawSky() {
+// Gradients are rebuilt only when their geometry changes, not every frame.
+let skyGrad = null, skyGradTop = NaN, dirtGrad = null;
+function skyGradient() {
   const top = Math.min(0, view.y0);
-  const g = ctx.createLinearGradient(0, top, 0, H);
-  g.addColorStop(0, '#4fa8dd'); g.addColorStop(.55, '#93d3f0'); g.addColorStop(1, '#d7f0fb');
-  ctx.fillStyle = g;
+  if (!skyGrad || top !== skyGradTop) {
+    skyGrad = ctx.createLinearGradient(0, top, 0, H);
+    skyGrad.addColorStop(0, '#4fa8dd'); skyGrad.addColorStop(.55, '#93d3f0'); skyGrad.addColorStop(1, '#d7f0fb');
+    skyGradTop = top;
+  }
+  return skyGrad;
+}
+function dirtGradient() {
+  if (!dirtGrad) {
+    dirtGrad = ctx.createLinearGradient(0, H * .3, 0, H);
+    dirtGrad.addColorStop(0, '#9c6237'); dirtGrad.addColorStop(1, '#5d3a21');
+  }
+  return dirtGrad;
+}
+
+function drawSky() {
+  ctx.fillStyle = skyGradient();
   ctx.fillRect(view.x0 - 40, view.y0 - 40, (view.x1 - view.x0) + 80, (view.y1 - view.y0) + 80);
 
   ctx.fillStyle = '#ffe066';
@@ -709,31 +756,72 @@ function drawSky() {
   }
 }
 
-function drawTerrain() {
-  const t = G.terrain;
-  // Run past the world edges so wide screens see the ground continue instead
-  // of stopping mid-air; ix() clamps, which extends the edge columns outwards.
-  const gx0 = Math.floor(view.x0) - 2, gx1 = Math.ceil(view.x1) + 2;
-  const bottom = view.y1 + 4;
+// The battlefield is redrawn into an offscreen canvas only when it actually
+// changes — a new round, or a crater — and blitted after that. Painting it
+// column by column every frame was costing ~150k fillRect calls a second.
+const terrainCv = document.createElement('canvas');
+const tctx = terrainCv.getContext('2d');
+let terrainQ = 0, terrainDirty = true;
+const markTerrainDirty = () => { terrainDirty = true; };
 
-  ctx.beginPath();
-  ctx.moveTo(gx0, bottom);
-  for (let x = gx0; x <= gx1; x++) ctx.lineTo(x, t[ix(x)]);
-  ctx.lineTo(gx1, bottom);
-  ctx.closePath();
-  const g = ctx.createLinearGradient(0, H * .3, 0, H);
+function rebuildTerrain(q) {
+  const t = G.terrain;
+  terrainQ = q;
+  terrainCv.width = Math.max(1, Math.ceil(W * q));
+  terrainCv.height = Math.max(1, Math.ceil(H * q));
+  tctx.setTransform(q, 0, 0, q, 0, 0);
+  tctx.clearRect(0, 0, W, H);
+
+  tctx.beginPath();
+  tctx.moveTo(0, H);
+  for (let x = 0; x < W; x++) tctx.lineTo(x, t[x]);
+  tctx.lineTo(W, H);
+  tctx.closePath();
+  const g = tctx.createLinearGradient(0, H * .3, 0, H);
   g.addColorStop(0, '#9c6237'); g.addColorStop(1, '#5d3a21');
-  ctx.fillStyle = g; ctx.fill();
+  tctx.fillStyle = g; tctx.fill();
 
   // Surface skin: grass where untouched, scorched dirt where a shell landed.
-  for (let x = gx0; x <= gx1; x++) {
-    const j = ix(x);
-    if (G.burn[j]) { ctx.fillStyle = '#4b3020'; ctx.fillRect(x, t[j], 1, 7); }
+  for (let x = 0; x < W; x++) {
+    if (G.burn[x]) { tctx.fillStyle = '#4b3020'; tctx.fillRect(x, t[x], 1, 7); }
     else {
-      ctx.fillStyle = '#63c53f'; ctx.fillRect(x, t[j], 1, 11);
-      ctx.fillStyle = '#3f9a27'; ctx.fillRect(x, t[j] + 11, 1, 5);
+      tctx.fillStyle = '#63c53f'; tctx.fillRect(x, t[x], 1, 11);
+      tctx.fillStyle = '#3f9a27'; tctx.fillRect(x, t[x] + 11, 1, 5);
     }
   }
+  terrainDirty = false;
+}
+
+function drawTerrain() {
+  const t = G.terrain;
+  const q = clamp(view.s * Math.min(window.devicePixelRatio || 1, 2), .5, 2);
+  if (terrainDirty || Math.abs(q - terrainQ) > .01) rebuildTerrain(q);
+
+  const dirt = dirtGradient();
+
+  // Everything below the world is bedrock, so it is one rectangle.
+  if (view.y1 > H) {
+    ctx.fillStyle = dirt;
+    ctx.fillRect(view.x0 - 4, H - 1, (view.x1 - view.x0) + 8, (view.y1 - H) + 8);
+  }
+
+  ctx.drawImage(terrainCv, 0, 0, W, H);
+
+  // Overscan: the edge column carried outwards so the ground reaches the screen
+  // edge. It is flat by construction, so it is a couple of rects, not a loop.
+  const edge = (x0, x1, col) => {
+    if (x1 <= x0) return;
+    const y = t[col], w = x1 - x0;
+    ctx.fillStyle = dirt; ctx.fillRect(x0, y, w, (view.y1 + 8) - y);
+    if (G.burn[col]) { ctx.fillStyle = '#4b3020'; ctx.fillRect(x0, y, w, 7); }
+    else {
+      ctx.fillStyle = '#63c53f'; ctx.fillRect(x0, y, w, 11);
+      ctx.fillStyle = '#3f9a27'; ctx.fillRect(x0, y + 11, w, 5);
+    }
+  };
+  // Overlap the blit by a unit at each side, or antialiasing leaves a seam.
+  edge(view.x0 - 4, 1, 0);
+  edge(W - 1, view.x1 + 4, W - 1);
 }
 
 function drawTank(tk) {
@@ -895,6 +983,7 @@ function aimAt(px, py) {
   tk.angle = Math.round(clamp(Math.atan2(-dy, dx) * 180 / Math.PI, 0, 180));
   tk.power = Math.round(clamp(10 + (dist - 60) * 90 / 340, 10, 100));
   G.drag = { x: px, y: py };
+  requestDraw();
   syncUI();
 }
 
@@ -914,6 +1003,7 @@ cv.addEventListener('pointermove', e => {
 const endDrag = e => {
   if (cv.hasPointerCapture?.(e.pointerId)) cv.releasePointerCapture(e.pointerId);
   G.drag = null;
+  requestDraw();
 };
 cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', endDrag);
@@ -936,14 +1026,21 @@ function buildScoreboard() {
 
 function syncUI() {
   if (!G.tanks.length) return;
+  requestDraw();
   const tk = G.tanks[G.cur];
   const aiming = G.state === 'aim';
 
   angleEl.value = tk.angle; powerEl.value = tk.power;
   el('angleRead').textContent = tk.angle;
   el('powerRead').textContent = tk.power;
-  angleEl.style.setProperty('--accent', tk.colour);
+  // Two shades of the player's colour: a pale one for angle, the full colour
+  // for power — plus power fills in from the left, so how "full" the shot is
+  // can be read at a glance without reading the number.
+  angleEl.style.setProperty('--accent', tint(tk.colour, .5));
+  angleEl.style.setProperty('--p', (tk.angle - 0) / 180);
   powerEl.style.setProperty('--accent', tk.colour);
+  powerEl.style.setProperty('--fill', tk.colour);
+  powerEl.style.setProperty('--p', (tk.power - 10) / 90);
   angleEl.disabled = powerEl.disabled = !aiming;
   fireBtn.disabled = !aiming;
   fireBtn.style.background = tk.colour;
@@ -962,10 +1059,7 @@ function syncUI() {
     n.classList.toggle('dead', t.dead);
   });
 
-  const mag = Math.abs(G.wind);
-  el('windArrows').textContent = mag === 0 ? '·' : (G.wind < 0 ? '◀' : '▶').repeat(Math.min(5, Math.ceil(mag / 2)));
-  el('windVal').textContent = mag;
-  el('wind').classList.toggle('calm', mag === 0);
+  el('roundVal').textContent = G.round;
 }
 
 function showBanner(title, text, colour) {
@@ -979,10 +1073,14 @@ const hideBanner = () => { banner.hidden = true; };
 angleEl.addEventListener('input', () => {
   G.tanks[G.cur].angle = +angleEl.value;
   el('angleRead').textContent = angleEl.value;
+  angleEl.style.setProperty('--p', +angleEl.value / 180);
+  requestDraw();
 });
 powerEl.addEventListener('input', () => {
   G.tanks[G.cur].power = +powerEl.value;
   el('powerRead').textContent = powerEl.value;
+  powerEl.style.setProperty('--p', (+powerEl.value - 10) / 90);
+  requestDraw();
 });
 fireBtn.addEventListener('click', fire);
 
@@ -997,18 +1095,33 @@ el('sound').addEventListener('click', e => {
   if (!muted) sfxThud();
 });
 
-// Fullscreen is the only way to actually pin orientation on Android Chrome.
-el('full').addEventListener('click', async () => {
+// Full screen. The same button leaves it again, and the label follows the
+// actual state so pressing Escape (or the system gesture) keeps it honest.
+// iOS Safari has no element fullscreen at all, so the button hides itself
+// rather than offering something that cannot work.
+const fullBtn = el('full');
+const canFull = document.fullscreenEnabled || !!document.documentElement.webkitRequestFullscreen;
+if (!canFull) fullBtn.hidden = true;
+
+fullBtn.addEventListener('click', async () => {
   try {
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen();
-      await screen.orientation?.lock?.('landscape');
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      const root = document.documentElement;
+      await (root.requestFullscreen?.() ?? root.webkitRequestFullscreen?.());
     } else {
-      screen.orientation?.unlock?.();
-      await document.exitFullscreen();
+      await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
     }
-  } catch { /* orientation lock is unsupported on iOS — the rotate prompt covers it */ }
+  } catch { /* the browser refused; the label resync below keeps things sane */ }
 });
+
+function syncFullLabel() {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  fullBtn.textContent = on ? 'Exit' : 'Full';
+  fullBtn.title = on ? 'Leave full screen' : 'Full screen';
+  relayout();
+}
+document.addEventListener('fullscreenchange', syncFullLabel);
+document.addEventListener('webkitfullscreenchange', syncFullLabel);
 
 addEventListener('keydown', e => {
   if (G.state === 'setup') return;
@@ -1108,6 +1221,7 @@ function fitCanvas() {
     : 0;
 
   ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * view.offX, dpr * view.offY);
+  requestDraw();                                   // the canvas was just cleared
 }
 const relayout = () => { applyLayout(); fitCanvas(); };
 addEventListener('resize', relayout);
