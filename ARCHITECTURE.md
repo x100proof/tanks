@@ -334,8 +334,19 @@ autoplay rules.
   as it descends, and it is cut with a short fade on impact.
 - **Explosion** — a low filtered noise burst plus a deep falling tone.
 - **Landing thud** and a four-note **victory** arpeggio.
+- **Angle ratchet** — every angle change ticks like a dial detent: a 30 ms
+  square blip, rate-limited to one per 28 ms so a fast sweep clatters like a
+  ratchet instead of buzzing. Fires from all four aiming inputs (slider, ±
+  buttons, arrow keys, drag-aiming), and only when the value actually moves —
+  pinning against a limit is silent.
+- **Power tone** — while power is being adjusted, a single triangle oscillator
+  hums at a pitch mapped exponentially to the stored energy:
+  `150 · 2^(2.5·(p−10)/90)` Hz, i.e. ≈150 Hz at power 10 rising ~2.5 octaves to
+  ≈850 Hz at 100. The oscillator is retuned with `setTargetAtTime` as the value
+  changes and fades out 180 ms after the last change (or immediately on fire).
 
-A **Sound** toggle mutes everything and stops any whistle in flight.
+A **Sound** toggle mutes everything and stops any whistle or power tone in
+flight.
 
 ---
 

@@ -472,6 +472,50 @@ function whistleStop() {
   o.stop(a.currentTime + .09);
 }
 
+// Aiming feedback. The angle dial ticks like a ratchet — one detent click per
+// change, rate-limited so a fast sweep clatters instead of buzzing.
+let lastTick = 0;
+function sfxAngleTick() {
+  if (muted) return;
+  const now = ac().currentTime;
+  if (now - lastTick < .028) return;
+  lastTick = now;
+  tone({ f0: 2100, f1: 1400, dur: .03, gain: .12, type: 'square' });
+}
+
+// The power dial hums at a pitch that tracks the stored energy: low and quiet
+// at 10, high at 100. One oscillator is retuned while power keeps changing and
+// fades out shortly after the last change.
+let ptone = null, ptoneTimer = 0;
+const powerHz = p => 150 * 2 ** (2.5 * (p - 10) / 90);   // 150 Hz → ~850 Hz
+function sfxPowerTone(p) {
+  if (muted) return;
+  const a = ac();
+  if (!ptone) {
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(powerHz(p), a.currentTime);
+    g.gain.setValueAtTime(0, a.currentTime);
+    g.gain.linearRampToValueAtTime(.14, a.currentTime + .03);
+    o.connect(g); g.connect(a.destination);
+    o.start();
+    ptone = { o, g, a };
+  }
+  ptone.o.frequency.setTargetAtTime(powerHz(p), a.currentTime, .02);
+  clearTimeout(ptoneTimer);
+  ptoneTimer = setTimeout(powerToneStop, 180);
+}
+function powerToneStop() {
+  clearTimeout(ptoneTimer);
+  if (!ptone) return;
+  const { o, g, a } = ptone;
+  ptone = null;
+  g.gain.cancelScheduledValues(a.currentTime);
+  g.gain.setValueAtTime(g.gain.value, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + .06);
+  o.stop(a.currentTime + .08);
+}
+
 // ------------------------------------------------------------------ game state
 const G = {
   terrain: new Float32Array(W),
@@ -640,6 +684,7 @@ function fire() {
   G.drag = null;
   G.state = 'fly';
   G.timer = 0;
+  powerToneStop();
   sfxFire();
   whistleStart();
   syncUI();
@@ -1115,8 +1160,11 @@ function aimAt(px, py) {
   const dx = px - p.x, dy = py - p.y;
   const dist = Math.hypot(dx, dy);
   if (dist < 12) return;
+  const a0 = tk.angle, p0 = tk.power;
   tk.angle = Math.round(clamp(Math.atan2(-dy, dx) * 180 / Math.PI, 0, 180));
   tk.power = Math.round(clamp(10 + (dist - 60) * 90 / 340, 10, 100));
+  if (tk.angle !== a0) sfxAngleTick();
+  if (tk.power !== p0) sfxPowerTone(tk.power);
   G.drag = { x: px, y: py };
   requestDraw();
   syncUI();
@@ -1211,12 +1259,14 @@ const hideBanner = () => { banner.hidden = true; };
 
 angleEl.addEventListener('input', () => {
   G.tanks[G.cur].angle = +angleEl.value;
+  sfxAngleTick();
   el('angleRead').textContent = angleEl.value;
   angleEl.style.setProperty('--p', +angleEl.value / 180);
   requestDraw();
 });
 powerEl.addEventListener('input', () => {
   G.tanks[G.cur].power = +powerEl.value;
+  sfxPowerTone(+powerEl.value);
   el('powerRead').textContent = powerEl.value;
   powerEl.style.setProperty('--p', (+powerEl.value - 10) / 90);
   requestDraw();
@@ -1226,8 +1276,15 @@ powerEl.addEventListener('input', () => {
 function nudge(dial, delta) {
   if (G.state !== 'aim') return;
   const tk = G.tanks[G.cur];
-  if (dial === 'angle') tk.angle = clamp(tk.angle + delta, 0, 180);
-  else tk.power = clamp(tk.power + delta, 10, 100);
+  if (dial === 'angle') {
+    const was = tk.angle;
+    tk.angle = clamp(tk.angle + delta, 0, 180);
+    if (tk.angle !== was) sfxAngleTick();
+  } else {
+    const was = tk.power;
+    tk.power = clamp(tk.power + delta, 10, 100);
+    if (tk.power !== was) sfxPowerTone(tk.power);
+  }
   syncUI();
 }
 
@@ -1258,7 +1315,7 @@ el('bannerNew').addEventListener('click', showSetup);
 el('newGame').addEventListener('click', showSetup);
 el('sound').addEventListener('click', e => {
   muted = !muted;
-  if (muted) whistleStop();
+  if (muted) { whistleStop(); powerToneStop(); }
   e.currentTarget.textContent = muted ? 'Muted' : 'Sound';
   e.currentTarget.setAttribute('aria-pressed', String(muted));
   if (!muted) sfxThud();
@@ -1302,6 +1359,7 @@ addEventListener('keydown', e => {
   }
   const tk = G.tanks[G.cur];
   const step = e.shiftKey ? 5 : 1;
+  const a0 = tk.angle, p0 = tk.power;
   switch (e.key) {
     case 'ArrowLeft':  tk.angle = clamp(tk.angle + step, 0, 180); break;
     case 'ArrowRight': tk.angle = clamp(tk.angle - step, 0, 180); break;
@@ -1310,6 +1368,8 @@ addEventListener('keydown', e => {
     case ' ': case 'Enter': fire(); e.preventDefault(); return;
     default: return;
   }
+  if (tk.angle !== a0) sfxAngleTick();
+  if (tk.power !== p0) sfxPowerTone(tk.power);
   e.preventDefault();
   syncUI();
 });
@@ -1509,6 +1569,7 @@ window.__debug = {
   tankScale: () => tankScale, sizeIdx: () => sizeIdx, sizes: () => TANK_SIZES.slice(),
   blastR: () => blastR, blastIdx: () => blastIdx, blasts: () => BLAST_SIZES.slice(),
   previewScale: () => previewScale, gameTankScale: () => tankScale * view.s,
+  powerToneAlive: () => !!ptone,
 };
 
 applyLayout();
