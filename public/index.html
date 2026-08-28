@@ -84,7 +84,10 @@
   .keys{font-size:11px; color:var(--muted); letter-spacing:.04em; font-weight:600; white-space:nowrap}
   kbd{background:var(--panel-2); border-radius:4px; padding:1px 5px; font:inherit; font-size:10px}
 
-  .dials{display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end}
+  /* The wide column gap keeps the angle "+" and the power "−" — side by side
+     in this layout — far enough apart that a fat finger can't hit the wrong
+     dial. */
+  .dials{display:grid; grid-template-columns:1fr 1fr auto; gap:12px 56px; align-items:end}
   .dial label{display:flex; justify-content:space-between; align-items:baseline; font-size:11px; letter-spacing:.18em; color:var(--muted); margin-bottom:2px}
   .dial .read{font-size:clamp(17px,3vw,26px); color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:0}
 
@@ -111,6 +114,10 @@
   input[type=range]::-moz-range-thumb{width:28px; height:28px; border-radius:50%; background:var(--accent); border:4px solid #0d141c; box-shadow:0 3px 8px rgba(0,0,0,.5)}
   input[type=range]:focus-visible{outline:3px solid #fff; outline-offset:4px; border-radius:99px}
   input[type=range]:disabled{opacity:.45; cursor:default}
+  /* The angle slider runs right-to-left so pushing the thumb right (toward +)
+     lowers the angle, i.e. swings the barrel clockwise — the thumb moves the
+     same way the barrel does. The value stays the true angle in degrees. */
+  #angle{direction:rtl}
 
   button{
     font:inherit; font-size:clamp(14px,2.6vw,20px); letter-spacing:.06em; color:#0d141c; background:#ffd54a;
@@ -122,6 +129,10 @@
   button:focus-visible{outline:3px solid #fff; outline-offset:3px}
   button.ghost{background:var(--panel-2); color:var(--ink); box-shadow:0 4px 0 #0b1119}
   button.tiny{font-size:13px; padding:7px 11px; border-radius:9px; letter-spacing:0}
+  #sound{display:inline-grid; place-items:center; padding:7px 9px}
+  #sound svg{width:16px; height:16px}
+  /* the [hidden] UA rule doesn't reliably reach SVG elements */
+  #sound svg[hidden]{display:none}
   .fire{min-width:170px; height:56px; padding:0 26px; color:#fff}
 
   /* One-at-a-time nudges either side of each slider, for fine aiming. */
@@ -185,7 +196,7 @@
   }
   html.short .hud{padding:4px 10px; border-radius:11px}
   html.short .score .num{font-size:24px}
-  html.short .dials{gap:9px}
+  html.short .dials{gap:9px 44px}
   html.short .dial label{margin-bottom:0}
   html.short .step{width:30px; height:30px; font-size:18px; border-radius:8px}
   html.short .dial .track{gap:5px}
@@ -220,7 +231,11 @@
     .score{gap:5px; padding:2px 4px; border-width:2px}
     .score{gap:5px; padding:3px 5px}
     .scores{gap:4px}
+    /* Stacked dials: extra space between the two dial rows so a fat finger
+       on one row's buttons can't land on the other — FIRE keeps its tight
+       gap below. */
     .dials{grid-template-columns:1fr; gap:8px}
+    .dial + .dial{margin-top:20px}
     .fire{grid-column:1 / -1; width:100%; min-width:0; margin-top:2px}
     .turnbar{flex-wrap:wrap; row-gap:4px}
     .turnbar .hint{font-size:10px}
@@ -310,7 +325,13 @@
       <span class="hint" id="hint">1 HIT = OUT</span>
       <span class="spacer"></span>
       <span class="keys"><kbd>←</kbd><kbd>→</kbd> angle <kbd>↑</kbd><kbd>↓</kbd> power <kbd>space</kbd> fire</span>
-      <button class="ghost tiny" id="sound" aria-pressed="false" title="Toggle sound">Sound</button>
+      <!-- The icon shows what pressing WILL do: crossed-out speaker mutes,
+           speaker with waves unmutes. Inline SVGs in the classic flat
+           speaker-icon style; no external assets. -->
+      <button class="ghost tiny" id="sound" aria-label="Mute" title="Mute">
+        <svg id="sndMute" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 7v6h4l5 4V3L6 7H2z"/><path d="M4 16 16 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <svg id="sndUnmute" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" hidden><path d="M2 7v6h4l5 4V3L6 7H2z"/><path d="M13.2 6.8a4.5 4.5 0 0 1 0 6.4M15.4 4.6a7.5 7.5 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
       <button class="ghost tiny" id="newGame">New</button>
     </div>
 
@@ -318,9 +339,9 @@
       <div class="dial">
         <label for="angle">ANGLE <span class="read"><span id="angleRead">45</span>°</span></label>
         <div class="track">
-          <button class="step" id="angleDown" aria-label="Angle down one degree">&minus;</button>
+          <button class="step" id="angleDown" aria-label="Rotate barrel anti-clockwise one degree">&minus;</button>
           <input type="range" id="angle" min="0" max="180" step="1" value="45" aria-label="Angle in degrees">
-          <button class="step" id="angleUp" aria-label="Angle up one degree">+</button>
+          <button class="step" id="angleUp" aria-label="Rotate barrel clockwise one degree">+</button>
         </div>
       </div>
       <div class="dial">
@@ -489,7 +510,7 @@ function sfxAngleTick() {
 // at 10, high at 100. One oscillator is retuned while power keeps changing and
 // fades out shortly after the last change.
 let ptone = null, ptoneTimer = 0;
-const powerHz = p => 150 * 2 ** (2.5 * (p - 10) / 90);   // 150 Hz → ~850 Hz
+const powerHz = p => 75 * 2 ** (2.5 * (p - 10) / 90);    // 75 Hz → ~425 Hz
 function sfxPowerTone(p) {
   if (muted) return;
   const a = ac();
@@ -1040,7 +1061,9 @@ function drawTank(tk) {
 function drawAim(tk) {
   const p = pivotOf(tk), d = aimDir(tk);
   const start = 42 * tankScale;
-  const len = start + 4 + tk.power * 0.85;
+  // Fixed length (what full power used to draw): the line is an angle guide,
+  // not a power gauge — the power slider's fill already shows the energy.
+  const len = start + 4 + 85;
   ctx.save();
   ctx.setLineDash([9, 11]);
   ctx.lineWidth = 5; ctx.lineCap = 'round';
@@ -1222,13 +1245,13 @@ function syncUI() {
   // for power — plus power fills in from the left, so how "full" the shot is
   // can be read at a glance without reading the number.
   angleEl.style.setProperty('--accent', tint(tk.colour, .5));
-  angleEl.style.setProperty('--p', (tk.angle - 0) / 180);
+  angleEl.style.setProperty('--p', (180 - tk.angle) / 180);
   powerEl.style.setProperty('--accent', tk.colour);
   powerEl.style.setProperty('--fill', tk.colour);
   powerEl.style.setProperty('--p', (tk.power - 10) / 90);
   angleEl.disabled = powerEl.disabled = !aiming;
-  el('angleDown').disabled = !aiming || tk.angle <= 0;
-  el('angleUp').disabled = !aiming || tk.angle >= 180;
+  el('angleDown').disabled = !aiming || tk.angle >= 180;
+  el('angleUp').disabled = !aiming || tk.angle <= 0;
   el('powerDown').disabled = !aiming || tk.power <= 10;
   el('powerUp').disabled = !aiming || tk.power >= 100;
   fireBtn.disabled = !aiming;
@@ -1263,7 +1286,7 @@ angleEl.addEventListener('input', () => {
   G.tanks[G.cur].angle = +angleEl.value;
   sfxAngleTick();
   el('angleRead').textContent = angleEl.value;
-  angleEl.style.setProperty('--p', +angleEl.value / 180);
+  angleEl.style.setProperty('--p', (180 - +angleEl.value) / 180);
   requestDraw();
 });
 powerEl.addEventListener('input', () => {
@@ -1305,8 +1328,10 @@ function holdToRepeat(btn, act) {
   // events — so this fires for Enter/Space only, never twice for a tap.
   btn.addEventListener('click', e => { if (e.detail === 0) act(); });
 }
-holdToRepeat(el('angleDown'), () => nudge('angle', -1));
-holdToRepeat(el('angleUp'), () => nudge('angle', 1));
+// − swings the barrel anti-clockwise (angle up), + clockwise (angle down),
+// matching the reversed angle slider.
+holdToRepeat(el('angleDown'), () => nudge('angle', 1));
+holdToRepeat(el('angleUp'), () => nudge('angle', -1));
 holdToRepeat(el('powerDown'), () => nudge('power', -1));
 holdToRepeat(el('powerUp'), () => nudge('power', 1));
 
@@ -1318,8 +1343,13 @@ el('newGame').addEventListener('click', showSetup);
 el('sound').addEventListener('click', e => {
   muted = !muted;
   if (muted) { whistleStop(); powerToneStop(); }
-  e.currentTarget.textContent = muted ? 'Muted' : 'Sound';
-  e.currentTarget.setAttribute('aria-pressed', String(muted));
+  // The button shows what pressing it WILL do, not the current state: a
+  // crossed-out speaker mutes, a speaker with sound waves unmutes.
+  el('sndMute').toggleAttribute('hidden', muted);
+  el('sndUnmute').toggleAttribute('hidden', !muted);
+  const verb = muted ? 'Unmute' : 'Mute';
+  e.currentTarget.title = verb;
+  e.currentTarget.setAttribute('aria-label', verb);
   if (!muted) sfxThud();
 });
 

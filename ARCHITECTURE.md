@@ -225,7 +225,17 @@ Three input methods drive the same two values (`angle`, `power`), and all three
 stay in sync through `syncUI`:
 
 - **Sliders** — angle `0..180`, power `10..100`, each flanked by a **−/+
-  button** that steps it by one for fine aiming. The buttons repeat when held
+  button** that steps it by one for fine aiming. The angle slider is rendered
+  right-to-left (`direction: rtl`), so pushing its thumb right — or tapping
+  its **+** button — *lowers* the angle and swings the barrel **clockwise**,
+  while **−** raises it and swings anti-clockwise: the control moves the same
+  way the barrel does. Its value stays the true angle in degrees, so assistive
+  tech announces the real number. The two dials keep a deliberately wide gap
+  between them in every layout (56px between the side-by-side columns, 44px in
+  the short-viewport overlay, 28px between the stacked portrait rows — FIRE
+  keeps its tight 8px row gap), so a fat finger on the angle **+** can't land
+  on the power **−** next to it — the game is played by young children. The
+  buttons repeat when held
   (350 ms before the first repeat, then every 55 ms), disable themselves at the
   ends of their range, and route through the same `syncUI` as everything else so
   the slider, the readout, the power fill and the barrel all stay in step. A tap
@@ -246,8 +256,10 @@ stay in sync through `syncUI`:
 - **Keyboard** — arrows adjust angle/power (with shift for coarse steps), space
   or enter fires.
 
-A short dashed lead line shows the aim direction, its length scaled by power. It
-deliberately does **not** plot the trajectory: finding the arc is the game.
+A short dashed lead line of fixed length (the length full power used to draw)
+shows the aim direction — it is purely an angle guide; the power slider's fill
+is what shows the stored energy. It deliberately does **not** plot the
+trajectory: finding the arc is the game.
 
 ---
 
@@ -343,12 +355,17 @@ autoplay rules.
   pinning against a limit is silent.
 - **Power tone** — while power is being adjusted, a single triangle oscillator
   hums at a pitch mapped exponentially to the stored energy:
-  `150 · 2^(2.5·(p−10)/90)` Hz, i.e. ≈150 Hz at power 10 rising ~2.5 octaves to
-  ≈850 Hz at 100. The oscillator is retuned with `setTargetAtTime` as the value
+  `75 · 2^(2.5·(p−10)/90)` Hz, i.e. ≈75 Hz at power 10 rising ~2.5 octaves to
+  ≈425 Hz at 100. The oscillator is retuned with `setTargetAtTime` as the value
   changes and fades out 180 ms after the last change (or immediately on fire).
 
-A **Sound** toggle mutes everything and stops any whistle or power tone in
-flight.
+A speaker-icon toggle mutes everything and stops any whistle or power tone in
+flight. The icons are inline SVGs in the classic flat speaker style (a
+rectangle-plus-horn silhouette — no emoji, no external assets), and the one
+shown is what pressing it **will do**, not the current state: while sound is
+on it shows a speaker with a slash through it (press to mute), and while muted
+it shows the speaker with sound-wave arcs (press to unmute). Its `title` and
+`aria-label` carry the matching verb ("Mute"/"Unmute").
 
 ---
 
