@@ -4,8 +4,7 @@ The design of this project. It describes the code as it exists now; see
 [`CLAUDE.md`](CLAUDE.md) for the rule that this file is kept in step with the
 implementation at all times.
 
-Tank Duel is a hot-seat artillery game for 2–4 players on one device, hosted at
-<https://tanks.example.com>.
+Tank Duel is a hot-seat artillery game for 2–4 players on one device.
 
 ---
 
@@ -16,8 +15,8 @@ Tank Duel is a hot-seat artillery game for 2–4 players on one device, hosted a
 | `public/index.html` | The entire game — markup, CSS and JS in one file. No build step, no dependencies, no external assets. |
 | `server.js` | Zero-dependency Node static file server for `public/`. |
 | `DEPLOY.md` | How anyone can host their own copy. Deliberately generic. |
-| `deploy/tanks.service` | systemd **user** unit, for the author's own host. |
-| `deploy/tanks.nginx` | nginx vhost for the backend host. |
+| `deploy/tanks.service` | systemd **user** unit used on the host that runs the game. |
+| `deploy/tanks.nginx` | nginx vhost on that host, proxying to the Node server. |
 
 Everything the browser needs is inside `public/index.html`: the graphics are
 drawn from geometry, the sounds are synthesised, and the favicon is an inline
@@ -371,36 +370,42 @@ it shows the speaker with sound-wave arcs (press to unmute). Its `title` and
 
 ## 11. Server and deployment
 
-> This section records how **this** instance is deployed. For hosting a copy
-> yourself, see [`DEPLOY.md`](DEPLOY.md), which is kept free of any of these
-> specifics.
+> This section records the *shape* of the deployment. For hosting a copy
+> yourself, see [`DEPLOY.md`](DEPLOY.md). Real hostnames, addresses and domain
+> names are deliberately not written down anywhere in this repository.
 
 `server.js` serves `public/` over HTTP on `127.0.0.1:3005` (override with
 `PORT`/`HOST`). It resolves and normalises the request path and refuses anything
 that escapes the document root, sends `Cache-Control: no-cache` so a reload
 always picks up a new build, and has no dependencies.
 
-The topology follows the other `*.example.com` sites on this host:
+The game sits behind two layers of nginx: a public edge host that terminates
+TLS and forwards a wildcard subdomain over a private network (a VPN mesh) to a
+backend host, which runs its own per-site nginx vhost and the Node process:
 
 ```
 browser
-  └── https://tanks.example.com
+  └── https://tanks.<domain>
         └── edge host (public nginx, terminates TLS)
-              │  *.example.com wildcard vhost → upstream backend, over the private network
-              └── backend host (this host)
-                    └── nginx vhost tanks.example.com  (127.0.0.1:80, <private-network-address>:80)
+              │  *.<domain> wildcard vhost → backend host, over the private network
+              └── backend host
+                    └── nginx vhost tanks.<domain>  (loopback + private-network address, :80)
                           └── proxy_pass 127.0.0.1:3005
                                 └── tanks.service (systemd --user) → node server.js
 ```
 
-- **Port 3005**, chosen because 3000–3004 were already taken on this host.
-- **systemd user service.** `tanks.service` runs as an unprivileged user with
-  `Restart=always` and `WantedBy=default.target`. Lingering is enabled for the
-  user (`loginctl enable-linger`), so the service starts at boot with no login
-  session and survives both a crash and a host restart.
-- **No edge changes were needed.** the edge host already proxies the
-  `*.example.com` wildcard to this host, and DNS already resolves the wildcard, so
-  adding the backend vhost was sufficient to publish the new subdomain.
+- **Port 3005**, chosen because 3000–3004 were already taken on the backend
+  host.
+- **systemd user service.** `deploy/tanks.service` runs as an unprivileged
+  user with `Restart=always` and `WantedBy=default.target`. Lingering is
+  enabled for that user (`loginctl enable-linger`), so the service starts at
+  boot with no login session and survives both a crash and a host restart.
+- **Backend vhost only.** `deploy/tanks.nginx` is the backend host's vhost. The
+  edge already proxies the wildcard subdomain and DNS already resolves it, so
+  adding this one vhost was enough to publish the new subdomain; the edge
+  needed no changes. The placeholders in the file (`tanks.example.com`, the
+  private-network listen address, the log paths) are filled in on the host and
+  never committed.
 
 ---
 

@@ -1,7 +1,6 @@
 # Tank Duel
 
-A hot-seat artillery game for 2–4 players on one device, hosted at
-<https://tanks.example.com>.
+A hot-seat artillery game for 2–4 players on one device.
 
 Pick how many players and name them, then take turns lobbing shells across
 randomly generated hills. Set **angle** and **power** and fire. The ground is

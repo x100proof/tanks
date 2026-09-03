@@ -1,7 +1,9 @@
+# Backend vhost. The public edge proxy forwards tanks.<domain> to this host
+# over the private network. Replace tanks.example.com and the listen address
+# with the real values on the host; do not commit them.
 server {
     listen 127.0.0.1:80;
     listen <private-network-address>:80;
-    # The public proxy (edge host) forwards tanks.example.com to this host
     server_name tanks.example.com;
     absolute_redirect off;
 

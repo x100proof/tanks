@@ -39,8 +39,10 @@ confirm every statement in it still holds.
 - `server.js` is a zero-dependency static file server and should stay boring.
 - `DEPLOY.md` explains how anyone can host their own copy, and must stay
   generic — no hostnames, addresses or infrastructure specific to one machine.
-  The author's own deployment is described in `ARCHITECTURE.md`, and the files
-  it uses are in `deploy/`.
+  The shape of the author's deployment is described in `ARCHITECTURE.md`, and
+  the unit and vhost files it uses are in `deploy/`. Nothing in the repository
+  may name a real host, domain, address or account: use placeholders such as
+  `tanks.example.com` and fill in the real values on the machine itself.
 
 ## Testing
 
