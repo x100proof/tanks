@@ -13,14 +13,20 @@ Tank Duel is a hot-seat artillery game for 2–4 players on one device.
 | Path | Role |
 |---|---|
 | `public/index.html` | The entire game — markup, CSS and JS in one file. No build step, no dependencies, no external assets. |
+| `public/manifest.webmanifest` | Web app manifest that makes the game installable (§12). |
+| `public/sw.js` | Service worker: offline cache, network first (§12). |
+| `public/icon.svg` | App icon source: a tank on a hill, drawn with the game's own shapes. |
+| `public/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | The icon rendered to PNG for platforms that need bitmaps (180px for iOS). |
 | `server.js` | Zero-dependency Node static file server for `public/`. |
 | `DEPLOY.md` | How anyone can host their own copy. Deliberately generic. |
 | `deploy/tanks.service` | systemd **user** unit used on the host that runs the game. |
 | `deploy/tanks.nginx` | nginx vhost on that host, proxying to the Node server. |
 
-Everything the browser needs is inside `public/index.html`: the graphics are
+Everything the *game* needs is inside `public/index.html`: the graphics are
 drawn from geometry, the sounds are synthesised, and the favicon is an inline
-SVG data URI. There are no images, fonts or audio files to fetch.
+SVG data URI. There are no images, fonts or audio files to fetch. The other
+files in `public/` exist only to make it an installable app (§12); the game
+plays without any of them, including straight off the filesystem.
 
 ---
 
@@ -295,7 +301,8 @@ full screen is active. Portrait hides the round counter to keep four scores
 legible. The same button leaves full screen again, and its
 label tracks `fullscreenchange`, so pressing Escape or using a system gesture
 keeps it honest. iOS Safari has no element fullscreen, so there the button
-hides itself rather than offering something that cannot work.
+hides itself rather than offering something that cannot work. It also hides
+when the game was launched as an installed fullscreen app (§12).
 
 Scores, the round counter, and the turn indicator are sized with `clamp()` so
 they stay readable from phone to desktop. The active player is marked on the
@@ -377,7 +384,9 @@ it shows the speaker with sound-wave arcs (press to unmute). Its `title` and
 `server.js` serves `public/` over HTTP on `127.0.0.1:3005` (override with
 `PORT`/`HOST`). It resolves and normalises the request path and refuses anything
 that escapes the document root, sends `Cache-Control: no-cache` so a reload
-always picks up a new build, and has no dependencies.
+always picks up a new build (the service worker is network first, so it does
+not get in the way — §12), and has no dependencies. It knows the MIME types
+for everything in `public/`, including `.webmanifest` and `.png`.
 
 The game sits behind two layers of nginx: a public edge host that terminates
 TLS and forwards a wildcard subdomain over a private network (a VPN mesh) to a
@@ -409,7 +418,46 @@ browser
 
 ---
 
-## 12. Debug handle
+## 12. Installable app (PWA)
+
+The game is a Progressive Web App: on a phone or tablet it can be added to the
+home screen and launched like a native app, and it then plays with no network.
+
+- **Manifest** (`manifest.webmanifest`). `display: fullscreen` (falling back to
+  `standalone` where fullscreen is not offered), `orientation: any` — the square
+  battlefield (§2) has no preferred orientation — and the page's dark
+  `#0d141c` as both theme and splash background. `start_url`, `scope` and `id`
+  are all `./`, so the app works from any path, not just a domain root.
+- **Icons.** `icon.svg` is the source: a red tank on a grassy hill, using the
+  same hull, tread, turret and barrel geometry as `tankBody()`/`paintBarrel()`.
+  It is full-bleed with the tank inside the central 80% circle, so one picture
+  serves as both the normal and the **maskable** icon. The PNGs are renders of
+  it (192, 512, and a 180px `apple-touch-icon` because iOS ignores SVG and the
+  manifest's icons). They were rendered with headless Chromium; re-render them
+  if the SVG changes.
+- **iOS** reads `apple-mobile-web-app-*` meta tags rather than the manifest's
+  display mode, so the page carries those too.
+- **Service worker** (`sw.js`), registered on `load` — only over http(s);
+  opened as a `file://` page there is no origin to register against and the
+  game simply runs without one. On install it precaches the page, manifest and
+  icons into cache `tanks-v1`. Every same-origin `GET` is then **network
+  first**: a successful response is served and copied into the cache; if the
+  network fails, the cached copy is served (navigations fall back to `./`).
+  This keeps the server's "a reload always picks up a new build" promise (§11)
+  whenever the device is online, so the cache never needs a version bump to
+  ship a change — the name only changes if the precache list's meaning does,
+  and `activate` deletes any cache with another name.
+- **Full Screen button.** Launched as an installed app in fullscreen display
+  mode, the button hides itself (§8): there is nothing to expand into. Element
+  fullscreen also matches `(display-mode: fullscreen)`, so this is decided once
+  at startup, before the button can have been pressed.
+
+A service worker needs a secure context: HTTPS, or `localhost`/`127.0.0.1`
+for development.
+
+---
+
+## 13. Debug handle
 
 `window.__debug` exposes `{ G, view, fire, newRound, startGame, worldW, worldH,
 tankScale, sizeIdx, sizes, previewScale, gameTankScale, blastR, blastIdx,

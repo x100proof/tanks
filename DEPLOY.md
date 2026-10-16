@@ -176,10 +176,17 @@ systemctl --user restart tanks.service    # only if you use the Node server
 ```
 
 The server sends `Cache-Control: no-cache`, so a reload always picks up a new
-version. On a static host, clear the CDN cache if it has one.
+version. On a static host, clear the CDN cache if it has one. The service
+worker fetches from the network first, so installed copies update the next
+time they are opened online; it only serves its cache when offline.
 
 ## Notes
 
+- **Installing as an app** (home screen, offline play) needs the game served
+  over **HTTPS** — or from `localhost` while testing. Every option above except
+  opening the file directly qualifies once HTTPS is in front of it. Serve
+  `sw.js` from the same directory as `index.html`, and if your host sets
+  caching headers, don't let it cache `sw.js` for long.
 - **Sound** needs a user gesture before it can start, which the **Start battle**
   button provides. Nothing to configure.
 - **Full screen** uses the Fullscreen API. It is unavailable on iOS Safari, where

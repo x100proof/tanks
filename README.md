@@ -14,7 +14,8 @@ result you expected is the whole point.
 
 Everything is drawn as vector graphics on a canvas and every sound is
 synthesised — no images, no fonts, no audio files, no dependencies, no build
-step. The whole game is one file: [`public/index.html`](public/index.html).
+step. The whole game is one file: [`public/index.html`](public/index.html)
+(the manifest, service worker and icons beside it only make it installable).
 
 ## Controls
 
@@ -52,6 +53,13 @@ To serve it instead:
 ```bash
 node server.js       # http://127.0.0.1:3005
 ```
+
+## Installing it
+
+Served over HTTPS, Tank Duel is an installable web app: use **Add to Home
+Screen** (iOS Safari: Share → Add to Home Screen; Android Chrome: the install
+prompt or ⋮ → Install app) and it launches full screen like a native app.
+Once it has been opened, it **plays offline** too.
 
 ## Hosting it yourself
 

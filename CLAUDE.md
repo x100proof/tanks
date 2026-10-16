@@ -35,7 +35,9 @@ confirm every statement in it still holds.
 - The entire game is one self-contained file, `public/index.html` — markup,
   styles, and game code, with no build step, no dependencies, and no external
   assets. Keep it that way unless the design in `ARCHITECTURE.md` says
-  otherwise.
+  otherwise. Alongside it, `manifest.webmanifest`, `sw.js` and the icons make
+  it an installable PWA; the game must keep working without them (e.g. over
+  `file://`).
 - `server.js` is a zero-dependency static file server and should stay boring.
 - `DEPLOY.md` explains how anyone can host their own copy, and must stay
   generic — no hostnames, addresses or infrastructure specific to one machine.

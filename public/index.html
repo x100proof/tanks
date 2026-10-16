@@ -5,8 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0d141c">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Tank Duel">
 <title>Tank Duel</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💥</text></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root{
     --panel:#16202c; --panel-2:#1e2c3c; --ink:#f2f7ff; --muted:#93a7bd;
@@ -1359,7 +1364,11 @@ el('sound').addEventListener('click', e => {
 // rather than offering something that cannot work.
 const fullBtn = el('full');
 const canFull = document.fullscreenEnabled || !!document.documentElement.webkitRequestFullscreen;
-if (!canFull) fullBtn.hidden = true;
+// Launched as an installed app in fullscreen display mode, there is nothing to
+// expand into. (Element fullscreen also matches the media query, so this is
+// only checked at startup, before the button can have been used.)
+const appFull = matchMedia('(display-mode: fullscreen)').matches && !document.fullscreenElement;
+if (!canFull || appFull) fullBtn.hidden = true;
 
 fullBtn.addEventListener('click', async () => {
   try {
@@ -1614,6 +1623,13 @@ startGame([PALETTE[0].name, PALETTE[1].name]);
 showSetup();                                  // ...but start on the setup screen
 if (matchMedia('(pointer:coarse)').matches) el('hint').textContent = 'DRAG TO AIM · 1 HIT = OUT';
 requestAnimationFrame(frame);
+
+// Installable app: the service worker caches the game so it runs offline.
+// Opened straight off the filesystem there is no origin to register against,
+// and the game simply runs without it.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 })();
 </script>
 </body>
