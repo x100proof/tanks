@@ -184,6 +184,19 @@
     border:none; border-bottom:2px solid var(--panel-2); width:8.5ch; padding:3px 0; letter-spacing:.04em;
   }
   .pcard input:focus{outline:none; border-bottom-color:var(--c)}
+  /* AI toggle: dim and outlined while the seat is a person, lit up in the
+     player's colour once the computer has it. */
+  .aibtn{
+    flex:none; font:inherit; font-size:clamp(12px,2vw,15px); letter-spacing:.06em;
+    padding:5px 9px; border-radius:8px; cursor:pointer;
+    background:transparent; color:var(--muted); border:2px solid var(--panel-2); opacity:.55; box-shadow:none;
+    transition:background .15s, color .15s, opacity .15s, box-shadow .15s;
+  }
+  .aibtn:active{box-shadow:none !important}
+  .aibtn[aria-pressed=true]{
+    background:var(--c); color:#0d141c; border-color:var(--c); opacity:1;
+    box-shadow:0 0 12px var(--c), 0 3px 0 rgba(0,0,0,.35);
+  }
 
   /* ---------- short viewports (phone held sideways) ---------- */
   /* Driven by the `short` class rather than a height media query, because when
@@ -561,6 +574,7 @@ const G = {
   killed: false,                    // did the last blast knock anyone out?
   clouds: [],
   drag: null,                       // live touch/mouse aim point, in logical coords
+  ai: null,                         // the computer player driving this turn (§7a)
 };
 
 const aliveTanks = () => G.tanks.filter(t => !t.dead);
@@ -673,6 +687,7 @@ function newRound(advanceStarter) {
     flatten(tk.x, Math.round(26 * tankScale));
     tk.y = G.terrain[ix(tk.x)];
     tk.vy = 0; tk.dead = false; tk.resting = true;
+    tk.brain = null;                            // new hills: the AI starts guessing afresh
     // Aim inwards to start: left half points right, right half points left.
     tk.angle = tk.x < W / 2 ? 45 : 135;
   });
@@ -681,6 +696,7 @@ function newRound(advanceStarter) {
   G.cur = G.starter;
   G.state = 'aim';
   G.shell = null; G.trail = []; G.parts = []; G.shake = 0; G.killed = false; G.drag = null;
+  G.ai = null;
   whistleStop();
   G.clouds = Array.from({ length: 5 }, () => ({
     x: rand(0, W), y: rand(40, 200), s: rand(.55, 1.15), sp: rand(3, 8),
@@ -689,11 +705,12 @@ function newRound(advanceStarter) {
   syncUI();
 }
 
-function startGame(names) {
+function startGame(names, ais = []) {
   G.tanks = names.map((name, i) => ({
     x: 0, y: 0, vy: 0, angle: 45, power: 60,
     name: name || PALETTE[i].name, colour: PALETTE[i].colour, dark: PALETTE[i].dark,
     score: 0, dead: false, resting: true,
+    ai: !!ais[i], brain: null,
   }));
   G.round = 1; G.starter = 0;
   buildScoreboard();
@@ -710,6 +727,7 @@ function fire() {
   G.shell = { x: p.x + d.x * muzzle, y: p.y + d.y * muzzle, vx: d.x * speed, vy: d.y * speed };
   G.trail = [{ x: G.shell.x, y: G.shell.y }];
   G.drag = null;
+  G.ai = null;
   G.state = 'fly';
   G.timer = 0;
   powerToneStop();
@@ -741,12 +759,14 @@ function stepShell(h) {
   }
   // Gone for good — off the bottom or well outside the field.
   if (s.y > H + 300 || s.x < -900 || s.x > W + 900) {
+    noteLanding(s.x);
     G.shell = null; whistleStop(); endTurn(); return true;
   }
   return false;
 }
 
 function impact(x, y, direct) {
+  noteLanding(x);
   G.shell = null;
   whistleStop();
 
@@ -785,6 +805,77 @@ function spawnExplosion(x, y) {
     });
   }
   G.parts.push({ flash: true, x, y, life: .26, max: .26, r: r * 1.7 });
+}
+
+// ------------------------------------------------------------------ computer players
+// Deliberately bad (ARCHITECTURE.md §7a): a wrong first guess, then a nudge of
+// 2-3 power per turn towards the target. It never computes a trajectory.
+const humanTurn = () => G.state === 'aim' && !!G.tanks[G.cur] && !G.tanks[G.cur].ai;
+
+// Where the shell came down, remembered by the AI tank that fired it.
+function noteLanding(x) {
+  const tk = G.tanks[G.cur];
+  if (tk && tk.ai && tk.brain) tk.brain.land = x;
+}
+
+function aiPlan(tk) {
+  const foes = G.tanks.filter(t => t !== tk && !t.dead);
+  if (!foes.length) return;
+  const target = foes.reduce((a, b) => Math.abs(b.x - tk.x) < Math.abs(a.x - tk.x) ? b : a);
+  const dir = target.x >= tk.x ? 1 : -1;
+  const dist = Math.abs(target.x - tk.x);
+  let b = tk.brain;
+
+  if (!b || b.target !== target) {
+    // A first guess that is meant to be wrong: roughly the flat-ground power
+    // for a 45° shot, then off by 15-30% either way.
+    const ideal = Math.sqrt(GRAV * dist) / MUZZLE_V;
+    const off = rand(.15, .30) * (Math.random() < .5 ? -1 : 1);
+    b = tk.brain = {
+      target, elev: Math.round(45 + rand(-8, 8)),
+      power: Math.round(clamp(ideal * (1 + off), 10, 100)), land: null,
+    };
+  } else if (b.land !== null) {
+    // Only ever a small step, however far off the last shot was.
+    const along = (b.land - tk.x) * dir;          // how far towards the target it got
+    const step = Math.random() < .5 ? 2 : 3;
+    b.power = clamp(b.power + (along > dist ? -step : step), 10, 100);
+    if (along < dist * .25) b.elev = Math.min(b.elev + 4, 75);   // a hill in the way
+    b.elev = clamp(b.elev, 25, 75);
+    b.land = null;
+  }
+  return { angle: dir > 0 ? b.elev : 180 - b.elev, power: b.power };
+}
+
+// Drives an AI turn from update(): think, turn the dials a notch at a time
+// where everyone can see them move, pause, fire.
+function updateAI(dt) {
+  const tk = G.tanks[G.cur];
+  if (G.state !== 'aim' || !tk || !tk.ai) return;
+  if (!G.ai || G.ai.who !== tk) {
+    const goal = aiPlan(tk) || { angle: tk.angle, power: tk.power };
+    G.ai = { who: tk, phase: 'think', t: 0, goal };
+    syncUI();
+  }
+  const a = G.ai;
+  a.t += dt;
+  if (a.phase === 'think') {
+    if (a.t >= .7) { a.phase = 'dial'; a.t = 0; }
+  } else if (a.phase === 'dial') {
+    while (a.t >= .05) {
+      a.t -= .05;
+      if (tk.angle !== a.goal.angle) {
+        tk.angle += Math.sign(a.goal.angle - tk.angle);
+        sfxAngleTick();
+      } else if (tk.power !== a.goal.power) {
+        tk.power += Math.sign(a.goal.power - tk.power);
+        sfxPowerTone(tk.power);
+      } else { a.phase = 'wait'; a.t = 0; break; }
+      syncUI();
+    }
+  } else if (a.t >= .45) {
+    fire();
+  }
 }
 
 const scoreLine = () => G.tanks.map(t => `${t.name} ${t.score}`).join(' · ');
@@ -836,6 +927,7 @@ function frame(now) {
 }
 
 function update(dt) {
+  updateAI(dt);
   for (const c of G.clouds) {
     c.x += c.sp * dt;
     if (c.x > view.x1 + 160) c.x = view.x0 - 160;
@@ -1201,14 +1293,14 @@ function aimAt(px, py) {
 }
 
 cv.addEventListener('pointerdown', e => {
-  if (G.state !== 'aim') return;
+  if (!humanTurn()) return;
   cv.setPointerCapture(e.pointerId);
   const p = toLogical(e.clientX, e.clientY);
   aimAt(p.x, p.y);
   e.preventDefault();
 });
 cv.addEventListener('pointermove', e => {
-  if (G.state !== 'aim' || !cv.hasPointerCapture(e.pointerId)) return;
+  if (!humanTurn() || !cv.hasPointerCapture(e.pointerId)) return;
   const p = toLogical(e.clientX, e.clientY);
   aimAt(p.x, p.y);
   e.preventDefault();
@@ -1242,6 +1334,7 @@ function syncUI() {
   requestDraw();
   const tk = G.tanks[G.cur];
   const aiming = G.state === 'aim';
+  const human = aiming && !tk.ai;               // nobody touches the dials on an AI's turn
 
   angleEl.value = tk.angle; powerEl.value = tk.power;
   el('angleRead').textContent = tk.angle;
@@ -1254,17 +1347,17 @@ function syncUI() {
   powerEl.style.setProperty('--accent', tk.colour);
   powerEl.style.setProperty('--fill', tk.colour);
   powerEl.style.setProperty('--p', (tk.power - 10) / 90);
-  angleEl.disabled = powerEl.disabled = !aiming;
-  el('angleDown').disabled = !aiming || tk.angle >= 180;
-  el('angleUp').disabled = !aiming || tk.angle <= 0;
-  el('powerDown').disabled = !aiming || tk.power <= 10;
-  el('powerUp').disabled = !aiming || tk.power >= 100;
-  fireBtn.disabled = !aiming;
+  angleEl.disabled = powerEl.disabled = !human;
+  el('angleDown').disabled = !human || tk.angle >= 180;
+  el('angleUp').disabled = !human || tk.angle <= 0;
+  el('powerDown').disabled = !human || tk.power <= 10;
+  el('powerUp').disabled = !human || tk.power >= 100;
+  fireBtn.disabled = !human;
   fireBtn.style.background = tk.colour;
   fireBtn.style.boxShadow = `0 5px 0 ${tk.dark}`;
 
   el('turnChip').style.background = tk.colour;
-  el('turnText').textContent = aiming ? `${tk.name}'s turn` :
+  el('turnText').textContent = aiming ? (tk.ai ? `${tk.name} (AI)` : `${tk.name}'s turn`) :
     G.state === 'over' ? 'Round over' : 'Shell away…';
 
   const nodes = el('scores').children;
@@ -1304,7 +1397,7 @@ powerEl.addEventListener('input', () => {
 // A single step of the dial. syncUI does the rest: sliders, readouts, the
 // power fill, the disabled states and a redraw.
 function nudge(dial, delta) {
-  if (G.state !== 'aim') return;
+  if (!humanTurn()) return;
   const tk = G.tanks[G.cur];
   if (dial === 'angle') {
     const was = tk.angle;
@@ -1340,7 +1433,7 @@ holdToRepeat(el('angleUp'), () => nudge('angle', -1));
 holdToRepeat(el('powerDown'), () => nudge('power', -1));
 holdToRepeat(el('powerUp'), () => nudge('power', 1));
 
-fireBtn.addEventListener('click', fire);
+fireBtn.addEventListener('click', () => { if (humanTurn()) fire(); });
 
 el('bannerBtn').addEventListener('click', () => { G.round++; newRound(true); });
 el('bannerNew').addEventListener('click', showSetup);
@@ -1398,6 +1491,7 @@ addEventListener('keydown', e => {
     if (e.key === 'Enter' && G.state === 'over') { G.round++; newRound(true); e.preventDefault(); }
     return;
   }
+  if (!humanTurn()) return;
   const tk = G.tanks[G.cur];
   const step = e.shiftKey ? 5 : 1;
   const a0 = tk.angle, p0 = tk.power;
@@ -1419,6 +1513,7 @@ addEventListener('keydown', e => {
 const setupEl = el('setup');
 let playerCount = 2;
 const names = PALETTE.map(p => p.name);      // remembered as the count changes
+const aiSeats = PALETTE.map(() => false);    // ...and so is which seats are AI
 
 function renderPlayers() {
   el('players').innerHTML = PALETTE.slice(0, playerCount).map((p, i) => `
@@ -1426,7 +1521,17 @@ function renderPlayers() {
       <span class="chip"></span>
       <input type="text" maxlength="10" data-i="${i}" value="${names[i]}"
              autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Player ${i + 1} name">
+      <button type="button" class="aibtn" data-i="${i}" aria-pressed="${aiSeats[i]}"
+              aria-label="Player ${i + 1} is played by the computer">AI</button>
     </label>`).join('');
+  el('players').querySelectorAll('.aibtn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();                     // don't let the label focus the name
+      const i = +btn.dataset.i;
+      aiSeats[i] = !aiSeats[i];
+      btn.setAttribute('aria-pressed', String(aiSeats[i]));
+    });
+  });
   el('players').querySelectorAll('input').forEach(inp => {
     inp.addEventListener('input', () => { names[+inp.dataset.i] = inp.value; });
     inp.addEventListener('focus', () => inp.select());
@@ -1553,7 +1658,7 @@ el('start').addEventListener('click', () => {
     .map((p, i) => (names[i] || '').trim().slice(0, 10) || p.name);
   setupEl.hidden = true;
   ac();                                       // unlock audio on this user gesture
-  startGame(chosen);
+  startGame(chosen, aiSeats.slice(0, playerCount));
 });
 
 // ------------------------------------------------------------------ boot
@@ -1611,6 +1716,7 @@ window.__debug = {
   blastR: () => blastR, blastIdx: () => blastIdx, blasts: () => BLAST_SIZES.slice(),
   previewScale: () => previewScale, gameTankScale: () => tankScale * view.s,
   powerToneAlive: () => !!ptone,
+  aiPlan,
 };
 
 applyLayout();

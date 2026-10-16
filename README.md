@@ -32,6 +32,12 @@ step. The whole game is one file: [`public/index.html`](public/index.html)
 
 Besides the number of players (2–4) and their names, the setup screen sets:
 
+- **Computer players.** Tap the dim **AI** button on a player's card and it
+  lights up: that tank is played by the computer. Tap it again to hand the seat
+  back to a person. The AI is deliberately bad — it guesses, watches where its
+  shell lands, and only nudges its power a little each turn, so it takes a
+  good few shots to find its range.
+
 - **Tank size**, from 0.35× to 1.75×. The preview shows the tank at exactly the
   size it will be in the game, and a bigger tank really is a bigger target.
 - **Blast radius**, from 0 to 84. The preview draws the lethal radius as a ring

@@ -171,8 +171,8 @@ even when the hull is tilted by the slope.
 
 | State | Meaning | Leaves when |
 |---|---|---|
-| `setup` | Setup screen: player count and names | **Start battle** pressed |
-| `aim` | Current player is aiming | **Fire** pressed |
+| `setup` | Setup screen: player count, names, which seats are AI | **Start battle** pressed |
+| `aim` | Current player is aiming (an AI aims itself, §7a) | **Fire** pressed |
 | `fly` | Shell in flight | shell hits or is lost |
 | `boom` | Explosion particles, screen shake | after 0.45 s |
 | `settle` | Tanks fall into fresh craters | all tanks at rest |
@@ -218,6 +218,12 @@ radius as a dashed ring around the tank at the same true scale, so the two
 settings can be judged against each other. At zero the ring is replaced by a
 crosshair on the tank itself and the screen says *direct hits only* — a note
 that drops onto its own line on a narrow screen rather than crowding the row.
+
+**Computer players.** Each player card carries an **AI** button. It starts
+dim (outlined, faded — that seat is a person); tapping it lights it up in the
+player's colour (`aria-pressed="true"`) and that seat is played by the computer
+(§7a). Tapping again dims it back. The choice is remembered per seat as the
+player count changes, like the names. Any mix is allowed, including all AI.
 
 Both are rendered with `tankBody()` and `paintBarrel()`, the same routines the
 battlefield uses — there is no second, drifting copy of what a tank looks like.
@@ -265,6 +271,49 @@ A short dashed lead line of fixed length (the length full power used to draw)
 shows the aim direction — it is purely an angle guide; the power slider's fill
 is what shows the stored energy. It deliberately does **not** plot the
 trajectory: finding the arc is the game.
+
+---
+
+## 7a. Computer players
+
+The AI is **deliberately bad**. It is a sparring partner for young children,
+so it must be beatable, and it should *look* like it is learning: it aims by
+trial and error, the same way a child does, and never computes a trajectory.
+
+**Memory.** Each AI tank has a `brain`: the target it is shooting at, the
+**elevation** it is using (degrees above the horizon towards the target, so
+one number works whichever way it faces), its power, and where its last shell
+came down. The brain is wiped at the start of every round, since the hills and
+positions are new.
+
+**Planning** (`aiPlan`), at the start of each AI turn:
+
+1. **Target** — the nearest living opponent along the ground.
+2. **New target** (or a new round) — a first guess that is meant to be wrong:
+   elevation 45° ± 8°, and the power a flat-ground 45° shot would need for that
+   distance, √(`GRAV`·d)/`MUZZLE_V`, then off by 15–30% either way. That leaves
+   it several shots from a hit.
+3. **Same target** — it looks at its last landing point. **Long** → power down;
+   **short** → power up; and **only a little: 2 or 3 units of power per
+   turn**, however far off the shot was. If the shell came down less than a
+   quarter of the way to the target (a hill in the way), it also lifts the
+   elevation 4°, up to 75°. Elevation stays within 25°–75° and power within
+   10–100.
+
+Because there is no wind, those nudges converge on a hit, but slowly. Where
+the shell lands is noted at impact (or where it left the field) for whichever
+AI tank fired it.
+
+**Turn.** While it is an AI tank's turn (`G.state === 'aim'`, `tk.ai`), `G.ai`
+drives it from `update()`: it **thinks** for 0.7 s, then **turns the dials** —
+angle first, then power — one unit every 0.05 s, with the same ratchet and
+power-tone sounds as a person's input, so children can watch what it changed.
+Then it waits 0.45 s and fires. The turn line reads *RED (AI)* instead of *RED's turn*.
+
+**People can't touch an AI's turn.** The sliders, ± buttons, FIRE, drag-aiming
+and the aiming keys are all disabled while the current tank is an AI.
+(`__debug.fire()` still works, for tests.) Leaving for the setup screen
+mid-turn simply stops it, because the AI only acts in `aim`.
 
 ---
 
@@ -461,7 +510,8 @@ for development.
 
 `window.__debug` exposes `{ G, view, fire, newRound, startGame, worldW, worldH,
 tankScale, sizeIdx, sizes, previewScale, gameTankScale, blastR, blastIdx,
-blasts }`. It is what the
+blasts, powerToneAlive, aiPlan }`. `startGame(names, ais)` takes an optional array of booleans
+marking which seats are AI. It is what the
 browser-driven tests use to inspect terrain, force deterministic shots and step
 rounds. It is intentionally shipped: this is a local hot-seat game with nothing
 to protect, and the handle makes the game testable.
